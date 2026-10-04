@@ -1,27 +1,24 @@
-# 🧪 Devnet lifecycle report — Skimmer Protocol
+# 🧪 Devnet lifecycle report — Skimmer Protocol v1
 
-Program: `2YHE64pk9NB5NZea7MUGKTdP6zKcjSg4dxdQUuxjdhqp` (fresh devnet ID)
-Binary: `target/deploy/skim_protocol.so`, 328,912 bytes → rent ≈ 2.2895 SOL
-Date: 2026-10-04. RPC: devnet.
+> SUPERSEDES the 2026-10-04 program-deploy report below. v1 runs on the plain
+> SPL-delegation rail — **no program deploy needed**. Live devnet program
+> `2YHE64pk9NB5NZea7MUGKTdP6zKcjSg4dxdQUuxjdhqp` is unrelated to v1 flow.
+> Canonical IDs: `docs/PROGRAM_IDS.md`.
 
-## Results
+## v1 swap lifecycle (`scripts/lifecycle-devnet.js`)
 
-| Check | Status | Evidence |
+| Step | Status | Evidence |
 |---|---|---|
-| Toolchain (anchor 0.29 + solana 2.2 + MSVC) | ✅ PASS | `anchor build` path fixed via `build-sbf-msvc.bat` (cargo `build-bpf`→`build-sbf` + crate pins in `Cargo.lock`) |
-| `anchor build` / BUILD-OK | ✅ PASS | `skim_protocol.so` 328,912 B |
-| Fee math (skim + 0.4%) | ✅ PASS | `node tests/fee-math.test.js` — 5% of 1M = 50000, 0.4% = 4000 |
-| Listener webhook (SWAP → queued) | ✅ PASS | `POST /webhook/tx` → `{"queued":1}`; non-SWAP → `{"queued":0}` |
-| Bot parsers (rate, cap, per-chat isolation) | ✅ PASS | `parseBps('5')=500`, `parseBps('2.5%')=250`, `25%` rejected, chat states isolated |
-| Telegram bot online (new copy) | ✅ PASS | `@SkimmerProtocol_Bot`, log `skim-telegram online`, PROGRAM_ID updated |
-| Fund deployer (needs ≥3 SOL devnet) | ⏳ BLOCKED | Faucet rate-limited; `scripts/fund-deploy-devnet.bat` looping detached, logging to `fund-deploy.log` |
-| `solana program deploy` devnet | ⏳ PENDING | Auto-fires when funded (see log) |
-| `scripts/lifecycle-devnet.js` (init wallet+config, SPL mint→approve→sweep→verify 5%) | ⏳ PENDING | Ready to run once deployed: `node scripts/lifecycle-devnet.js` |
-| Helius devnet webhook → public listener | ⬜ TODO | Needs public URL (Railway) — synthetic POST proven locally |
+| Keeper engine builds (`keeper/dist/engine.js`) | ✅ PASS | `npm run build` clean |
+| Fee math (5% skim + 0.4% fee) | ✅ PASS | `node tests/fee-math.test.js` |
+| Listener webhook (SWAP → queued, noise ignored) | ✅ PASS | `POST /webhook/tx` → `{"queued":1}` / `{"queued":0}` |
+| Bot parsers + per-chat isolation | ✅ PASS | 500/250 bps, 25% rejected, states isolated |
+| On-chain swap test (approve → mint → sweep → verify) | ⏳ PENDING FUNDS | Script exits 2 `UNDERFUNDED` until `keys/lifecycle-user.json` (`5LXiYtjopNFjQNgFJ9KS36jbGhcH8cWFUiUVH1UU5QFy`) holds ≥0.05 devnet SOL. Faucet throttled; run `node scripts/lifecycle-devnet.js` once funded. |
 
-## Watch
+Run: `node scripts/lifecycle-devnet.js` (expects 5% → savings, 0.4% → treasury `85TK12...S3ka`).
 
-- `fund-deploy.log` — when it shows FUNDED + deploy signature, run:
-  `solana program show 2YHE64pk9NB5NZea7MUGKTdP6zKcjSg4dxdQUuxjdhqp --url devnet`
-  then `node scripts/lifecycle-devnet.js` (needs user wallet airdrop — same faucet).
-- Private keys stay in `keys/` (gitignored). Nothing secret is committed.
+---
+*Archived 2026-10-04 program-deploy report (deferred rail — kept for history):*
+- `skim_protocol.so` 328,912 B built via `build-sbf-msvc.bat` (BUILD-OK). Rent ≈ 2.29 SOL.
+- Fresh devnet ID `EbRLUsTw…` retired (never deployed, key parked per `docs/PROGRAM_IDS.md`).
+- Devnet deploy + fund loop never fired (faucet rate-limited); loop retired with the rail.

@@ -169,6 +169,7 @@ const WELCOME = [
   '',
   'Then one tap to approve in your wallet ✅ — that’s it.',
   '🔑 I never hold your keys. I never trade. I just save. 🛡️',
+  '🐦 News + drops: https://x.com/SkimProtocolFun',
 ].join('\n');
 
 const HELP = [
@@ -185,6 +186,7 @@ const HELP = [
   '↩️ /cancel — forget what I was waiting for',
   '',
   '💡 You can also just <b>paste</b> a wallet address or a % and I will ask what it is for.',
+  '🐦 Follow along: https://x.com/SkimProtocolFun',
   '🚫 No buying or selling here — trade on any app, saving is automatic! ✨',
 ].join('\n');
 

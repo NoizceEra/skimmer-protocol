@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800" role="img" aria-label="Skimmer Protocol Profile Picture">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B1220"/>
+      <stop offset="50%" stop-color="#060913"/>
+      <stop offset="100%" stop-color="#03050A"/>
+    </linearGradient>
+
+    <!-- Mint Gradients -->
+    <linearGradient id="mintGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#10B981"/>
+      <stop offset="40%" stop-color="#12D18E"/>
+      <stop offset="100%" stop-color="#3DF5A5"/>
+    </linearGradient>
+    <linearGradient id="mintGlowLine" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#12D18E"/>
+      <stop offset="100%" stop-color="#4EFEB3"/>
+    </linearGradient>
+
+    <!-- Radial Glows -->
+    <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#3DF5A5" stop-opacity="0.22"/>
+      <stop offset="50%" stop-color="#12D18E" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#3DF5A5" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="indigoAmbient" cx="80%" cy="20%" r="60%">
+      <stop offset="0%" stop-color="#4F46E5" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#4F46E5" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Subtle Grid Pattern -->
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#FFFFFF" stroke-opacity="0.025" stroke-width="1"/>
+    </pattern>
+
+    <!-- Filter for soft neon glow -->
+    <filter id="neonGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Base Background -->
+  <rect width="800" height="800" fill="url(#bgGrad)"/>
+  <rect width="800" height="800" fill="url(#grid)"/>
+
+  <!-- Ambient Glows -->
+  <circle cx="600" cy="200" r="350" fill="url(#indigoAmbient)"/>
+  <circle cx="400" cy="400" r="320" fill="url(#centerGlow)"/>
+
+  <!-- Outer subtle circular guide / framing ring -->
+  <circle cx="400" cy="400" r="370" fill="none" stroke="#3DF5A5" stroke-opacity="0.10" stroke-width="1.5" stroke-dasharray="8 12"/>
+  <circle cx="400" cy="400" r="356" fill="none" stroke="#FFFFFF" stroke-opacity="0.04" stroke-width="1"/>
+
+  <!-- Centered Glass Emblem Container -->
+  <rect x="180" y="180" width="440" height="440" rx="100" fill="#0C1322" fill-opacity="0.75" stroke="#3DF5A5" stroke-opacity="0.22" stroke-width="2"/>
+  <rect x="181" y="181" width="438" height="438" rx="99" fill="none" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="1"/>
+
+  <!-- Minimalist Skimmer Brand Mark (Scaled & Centered precisely) -->
+  <!-- Original bbox: x:13..51 (cx=32), y:8.6..51 (cy=29.8) -->
+  <!-- Target Center: (400, 400). Scale: 5.6 -->
+  <!-- Offset X: 400 - (32 * 5.6) = 400 - 179.2 = 220.8 -->
+  <!-- Offset Y: 400 - (29.8 * 5.6) = 400 - 166.88 = 233.12 -->
+  <g transform="translate(220.8, 233.12) scale(5.6)">
+    <!-- Bar 1 (Left / Initial cut) -->
+    <rect x="16" y="39" width="7" height="12" rx="3.5" fill="url(#mintGrad)"/>
+    <!-- Bar 2 (Middle / Accumulated) -->
+    <rect x="28.5" y="31" width="7" height="20" rx="3.5" fill="url(#mintGrad)"/>
+    <!-- Bar 3 (Right / Growth) -->
+    <rect x="41" y="23" width="7" height="28" rx="3.5" fill="url(#mintGrad)"/>
+    <!-- Diagonal Skim Slice Line with glow -->
+    <path d="M13 35 L51 8.6" fill="none" stroke="#12D18E" stroke-width="5" stroke-linecap="round" opacity="0.4" filter="url(#neonGlow)"/>
+    <path d="M13 35 L51 8.6" fill="none" stroke="url(#mintGlowLine)" stroke-width="3.8" stroke-linecap="round"/>
+  </g>
+</svg>

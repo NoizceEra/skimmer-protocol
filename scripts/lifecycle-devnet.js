@@ -1,113 +1,70 @@
 'use strict';
 /**
- * Devnet lifecycle test for Skimmer Protocol.
- * Steps: fund user -> initialize_smart_wallet -> initialize_config -> read back PDAs
- *        -> create test SPL mint -> fund user ATA -> approve keeper -> processSkim -> verify.
- * Needs: program deployed on devnet, user wallet funded. Exits non-zero on failure.
+ * Devnet SWAP LIFECYCLE test — v1 SPL-delegation rail (no program needed).
+ *
+ * Flow: fund keeper -> create test mint -> mint 1000 tokens to user (= simulated
+ * swap output sitting in their wallet) -> bounded Approve to keeper ->
+ * engine.processSkim -> assert savings got 5% and treasury got 0.4%.
+ *
+ * Needs: keys/lifecycle-user.json + keys/lifecycle-keeper.json funded with a
+ * little devnet SOL (faucet: `solana airdrop 1 <addr> --url devnet`).
+ * Exit 0 PASS, 1 FAIL, 2 UNDERFUNDED.
  * Never prints secret keys.
  */
-const path = require('node:path');
-const crypto = require('node:crypto');
 const fs = require('node:fs');
 
 const ROOT = 'D:/ai-studio/skim-protocol';
 const web3 = require(ROOT + '/keeper/node_modules/@solana/web3.js');
 const spl = require(ROOT + '/keeper/node_modules/@solana/spl-token');
 
-const { Connection, Keypair, PublicKey, Transaction, TransactionInstruction, SystemProgram } = web3;
-
+const { Connection, Keypair, PublicKey, Transaction, SystemProgram } = web3;
 const RPC = process.env.RPC_URL ?? 'https://api.devnet.solana.com';
-const PROGRAM_ID = new PublicKey(process.env.PROGRAM_ID ?? '2YHE64pk9NB5NZea7MUGKTdP6zKcjSg4dxdQUuxjdhqp');
 const TREASURY = new PublicKey(process.env.TREASURY ?? '85TK12gDB5HEJog6g9Gs7sw9xomrsMfsAy8ZSgGtS3ka');
 const SAVINGS_BPS = 500; // 5%
 const FEE_BPS = 40; // 0.4%
 
-const disc = (name) => crypto.createHash('sha256').update('global:' + name).digest().subarray(0, 8);
-
-function u16le(n) {
-  const b = Buffer.alloc(2);
-  b.writeUInt16LE(n, 0);
-  return b;
-}
+const load = (p) => Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(p, 'utf8'))));
 
 async function main() {
   const connection = new Connection(RPC, 'confirmed');
-  const progInfo = await connection.getAccountInfo(PROGRAM_ID);
-  if (!progInfo || !progInfo.executable) throw new Error('program not deployed on devnet yet: ' + PROGRAM_ID.toBase58());
-  console.log('program live:', PROGRAM_ID.toBase58(), progInfo.data.length, 'bytes');
-
-  // 1. user + savings wallets
-  const userPath = ROOT + '/keys/user-devnet.json';
-  let user;
-  if (fs.existsSync(userPath)) {
-    user = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(userPath, 'utf8'))));
-  } else {
-    user = Keypair.generate();
-    fs.writeFileSync(userPath, JSON.stringify(Array.from(user.secretKey)));
-  }
-  const savings = Keypair.generate();
+  const user = load(ROOT + '/keys/lifecycle-user.json');
+  const keeper = load(ROOT + '/keys/lifecycle-keeper.json');
+  const savings = load(ROOT + '/keys/lifecycle-savings.json');
   console.log('user:', user.publicKey.toBase58());
+  console.log('keeper:', keeper.publicKey.toBase58());
+  console.log('savings:', savings.publicKey.toBase58());
+
   const bal = await connection.getBalance(user.publicKey);
   console.log('user balance:', bal / 1e9, 'SOL');
-  if (bal < 0.05 * 1e9) throw new Error('user underfunded — airdrop devnet SOL first');
+  if (bal < 0.05 * 1e9) {
+    console.error('UNDERFUNDED: send devnet SOL to ' + user.publicKey.toBase58());
+    process.exit(2);
+  }
 
-  // 2. initialize_smart_wallet
-  const [walletPda] = PublicKey.findProgramAddressSync([Buffer.from('smart_wallet'), user.publicKey.toBuffer()], PROGRAM_ID);
-  const ixData = Buffer.concat([disc('initialize_smart_wallet'), TREASURY.toBuffer(), savings.publicKey.toBuffer(), u16le(FEE_BPS), u16le(SAVINGS_BPS)]);
-  const ix = new TransactionInstruction({
-    programId: PROGRAM_ID,
-    keys: [
-      { pubkey: walletPda, isSigner: false, isWritable: true },
-      { pubkey: user.publicKey, isSigner: true, isWritable: true },
-      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-    ],
-    data: ixData,
-  });
-  const tx = new Transaction().add(ix);
-  const sig1 = await web3.sendAndConfirmTransaction(connection, tx, [user]);
-  console.log('initialize_smart_wallet:', sig1);
-
-  // 3. initialize_config
-  const [cfgPda] = PublicKey.findProgramAddressSync([Buffer.from('user_config'), user.publicKey.toBuffer()], PROGRAM_ID);
-  const cfgData = Buffer.concat([disc('initialize_config'), walletPda.toBuffer(), savings.publicKey.toBuffer(), u16le(SAVINGS_BPS)]);
-  const ix2 = new TransactionInstruction({
-    programId: PROGRAM_ID,
-    keys: [
-      { pubkey: cfgPda, isSigner: false, isWritable: true },
-      { pubkey: user.publicKey, isSigner: true, isWritable: true },
-      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-    ],
-    data: cfgData,
-  });
-  const sig2 = await web3.sendAndConfirmTransaction(connection, new Transaction().add(ix2), [user]);
-  console.log('initialize_config:', sig2);
-
-  // 4. read back SmartWallet
-  const wInfo = await connection.getAccountInfo(walletPda);
-  if (!wInfo) throw new Error('wallet PDA missing after init');
-  const savBps = wInfo.data.readUInt16LE(8 + 32 + 32 + 32);
-  const feeBps = wInfo.data.readUInt16LE(8 + 32 + 32 + 32 + 2);
-  console.log('wallet on-chain: savings_bps=' + savBps, 'fee_bps=' + feeBps);
-  if (savBps !== SAVINGS_BPS || feeBps !== FEE_BPS) throw new Error('rate mismatch on-chain!');
-
-  // 5. test mint -> fund -> approve -> sweep (full skim lifecycle on SPL)
-  const keeper = Keypair.generate();
-  // keeper pays sweep tx fees -> fund it; treasury ATA must exist for the fee leg
-  const fundTx = new Transaction().add(
-    SystemProgram.transfer({ fromPubkey: user.publicKey, toPubkey: keeper.publicKey, lamports: 20_000_000 }),
+  // keeper pays sweep tx fees -> fund it from user
+  await web3.sendAndConfirmTransaction(
+    connection,
+    new Transaction().add(SystemProgram.transfer({
+      fromPubkey: user.publicKey, toPubkey: keeper.publicKey, lamports: 20_000_000,
+    })),
+    [user],
   );
-  await web3.sendAndConfirmTransaction(connection, fundTx, [user]);
+  console.log('keeper funded');
+
+  // test mint + 1000 tokens (= simulated swap output) in user ATA
   const mint = await spl.createMint(connection, user, user.publicKey, null, 6);
   console.log('test mint:', mint.toBase58());
-  await spl.getOrCreateAssociatedTokenAccount(connection, user, mint, TREASURY);
   const userAta = await spl.getOrCreateAssociatedTokenAccount(connection, user, mint, user.publicKey);
-  await spl.mintTo(connection, user, mint, userAta.address, user.publicKey, 1_000_000_000); // 1000 tokens
-  const keeperAta = await spl.getOrCreateAssociatedTokenAccount(connection, user, mint, keeper.publicKey);
-  void keeperAta;
-  await spl.approve(connection, user, userAta.address, keeper.publicKey, user.publicKey, 1_000_000_000);
-  console.log('keeper approved');
+  await spl.mintTo(connection, user, mint, userAta.address, user.publicKey, 1_000_000_000);
+  await spl.getOrCreateAssociatedTokenAccount(connection, user, mint, savings.publicKey);
+  await spl.getOrCreateAssociatedTokenAccount(connection, user, mint, TREASURY);
+  console.log('minted 1000 tokens to user (trade output simulation)');
 
-  const { processSkim } = require(ROOT + '/keeper/dist/sweeper.js');
+  // bounded approve: exactly the output amount, revocable anytime
+  await spl.approve(connection, user, userAta.address, keeper.publicKey, user.publicKey, 1_000_000_000);
+  console.log('keeper approved (bounded, revocable)');
+
+  const { processSkim } = require(ROOT + '/keeper/dist/engine.js');
   const out = await processSkim({
     connection,
     keeper,
@@ -116,23 +73,25 @@ async function main() {
     mint,
     outputAmount: 1_000_000_000n,
     decimals: 6,
+    swapSignature: 'lifecycle-swap-' + Date.now(),
     savingsBps: SAVINGS_BPS,
     savingsDestination: savings.publicKey,
-    paused: false,
-    swapSignature: 'lifecycle-test-' + Date.now(),
   });
-  console.log('sweep result:', JSON.stringify(out));
-  if (!out.signature) throw new Error('sweep skipped: ' + out.skipped);
+  console.log('sweep result:', JSON.stringify(out, (_, v) => typeof v === 'bigint' ? v.toString() : v));
+  if (out.status !== 'swept') throw new Error('sweep did not happen: ' + out.status + '/' + (out.reason ?? ''));
 
   const savAta = spl.getAssociatedTokenAddressSync(mint, savings.publicKey);
-  const savBal = await connection.getTokenAccountBalance(savAta).catch(() => null);
-  console.log('savings ATA balance:', savBal ? savBal.value.uiAmountString : 'MISSING');
-  if (!savBal || BigInt(savBal.value.amount) !== 50_000_000n) throw new Error('skim amount wrong (want 50 tokens @5%)');
+  const treAta = spl.getAssociatedTokenAddressSync(mint, TREASURY);
+  const savBal = await connection.getTokenAccountBalance(savAta);
+  const treBal = await connection.getTokenAccountBalance(treAta);
+  console.log('savings:', savBal.value.uiAmountString, '| treasury:', treBal.value.uiAmountString);
+  if (savBal.value.amount !== '50000000') throw new Error('savings wrong (want 50.0 @5%)');
+  if (treBal.value.amount !== '4000000') throw new Error('fee wrong (want 4.0 @0.4%)');
 
-  console.log('LIFECYCLE PASS: onboard -> configure -> trade-proxy -> skim -> verified');
+  console.log('DEVNET SWAP LIFECYCLE PASS: approve -> trade-output -> skim 5% + fee 0.4% verified on-chain');
 }
 
 main().catch((e) => {
   console.error('LIFECYCLE FAIL:', e.message);
-  process.exit(1);
+  process.exit(e.message.startsWith('UNDERFUNDED') ? 2 : 1);
 });
