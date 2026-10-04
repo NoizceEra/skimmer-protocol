@@ -1,0 +1,23 @@
+{
+  "name": "skim-telegram-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Skim Protocol Telegram — onboarding + status ONLY. No trading.",
+  "type": "commonjs",
+  "main": "src/bot.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node src/bot.js",
+    "dev": "npm run build && node src/bot.js"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.98.4",
+    "dotenv": "^16.4.5",
+    "grammy": "^1.30.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^5.4.5"
+  }
+}

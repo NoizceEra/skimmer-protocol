@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="420" font-family="Arial">
+<rect width="900" height="420" fill="#0f172a"/>
+<text x="450" y="30" fill="#fff" font-size="18" text-anchor="middle">Skim Protocol — your keys, auto-save as a fee</text>
+<rect x="20" y="60" width="200" height="80" rx="10" fill="#1e40af"/><text x="120" y="85" fill="#fff" font-size="13" text-anchor="middle">1. YOU + YOUR WALLET</text><text x="120" y="105" fill="#bfdbfe" font-size="11" text-anchor="middle">Phantom / Solflare</text><text x="120" y="120" fill="#bfdbfe" font-size="11" text-anchor="middle">exportable, you own keys</text>
+<rect x="250" y="60" width="200" height="80" rx="10" fill="#047857"/><text x="350" y="85" fill="#fff" font-size="13" text-anchor="middle">2. TELEGRAM SETUP</text><text x="350" y="105" fill="#a7f3d0" font-size="11" text-anchor="middle">/connect /set_rate /set_dest</text><text x="350" y="120" fill="#a7f3d0" font-size="11" text-anchor="middle">one signature, tag only</text>
+<rect x="480" y="60" width="200" height="80" rx="10" fill="#7c2d12"/><text x="580" y="85" fill="#fff" font-size="13" text-anchor="middle">3. TRADE ANYWHERE</text><text x="580" y="105" fill="#fed7aa" font-size="11" text-anchor="middle">Axiom / GMGN / Photon</text><text x="580" y="120" fill="#fed7aa" font-size="11" text-anchor="middle">same wallet, same habit</text>
+<rect x="250" y="180" width="200" height="80" rx="10" fill="#334155"/><text x="350" y="205" fill="#fff" font-size="13" text-anchor="middle">4. LISTENER SEES SWAP</text><text x="350" y="225" fill="#cbd5e1" font-size="11" text-anchor="middle">webhook by feePayer = you</text><text x="350" y="240" fill="#cbd5e1" font-size="11" text-anchor="middle">no action needed</text>
+<rect x="480" y="180" width="200" height="80" rx="10" fill="#0e7490"/><text x="580" y="205" fill="#fff" font-size="13" text-anchor="middle">5. KEEPER SWEEPS ONCE</text><text x="580" y="225" fill="#cffafe" font-size="11" text-anchor="middle">skim to YOU + 0.4% to treasury</text><text x="580" y="240" fill="#cffafe" font-size="11" text-anchor="middle">output x bps / 10000</text>
+<rect x="20" y="180" width="200" height="80" rx="10" fill="#14532d"/><text x="120" y="205" fill="#fff" font-size="13" text-anchor="middle">6. SAVINGS GROWS</text><text x="120" y="225" fill="#bbf7d0" font-size="11" text-anchor="middle">destination wallet = yours</text><text x="120" y="240" fill="#bbf7d0" font-size="11" text-anchor="middle">/accrued in Telegram</text>
+<text x="450" y="310" fill="#facc15" font-size="13" text-anchor="middle">Export anytime — config follows pubkey, not device. Revoke / pause anytime.</text>
+<text x="450" y="335" fill="#94a3b8" font-size="12" text-anchor="middle">No PDA to export. No new seed. PDA only used as optional vault, never for trading.</text>
+<line x1="220" y1="100" x2="250" y2="100" stroke="#fff" stroke-width="2" marker-end="url(#a)"/>
+<line x1="450" y1="100" x2="480" y2="100" stroke="#fff" stroke-width="2"/>
+<line x1="580" y1="140" x2="580" y2="180" stroke="#fff" stroke-width="2"/>
+<line x1="480" y1="220" x2="450" y2="220" stroke="#fff" stroke-width="2"/>
+<line x1="250" y1="220" x2="220" y2="220" stroke="#fff" stroke-width="2"/>
+</svg>

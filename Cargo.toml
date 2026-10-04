@@ -1,0 +1,3 @@
+[workspace]
+members = ["programs/skim_protocol"]
+resolver = "2"

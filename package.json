@@ -1,0 +1,12 @@
+{
+  "name": "skim-protocol",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Skim Protocol — fee-routed smart wallets, not a trading bot",
+  "scripts": {
+    "build": "anchor build",
+    "test": "node tests/fee-math.test.js",
+    "keeper:typecheck": "npm --prefix keeper run typecheck",
+    "bot:typecheck": "npm --prefix bots/telegram run typecheck"
+  }
+}

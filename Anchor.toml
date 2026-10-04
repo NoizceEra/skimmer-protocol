@@ -1,0 +1,27 @@
+[toolchain]
+anchor_version = "0.29.0"
+
+[features]
+resolution = true
+skip-lint = false
+
+# One program: smart-wallet factory + fee enforcer + user-config tag.
+# NOTE: devnet id is a placeholder. Generate fresh under multisig for mainnet.
+[programs.devnet]
+skim_protocol = "2YHE64pk9NB5NZea7MUGKTdP6zKcjSg4dxdQUuxjdhqp"
+
+[programs.localnet]
+skim_protocol = "2YHE64pk9NB5NZea7MUGKTdP6zKcjSg4dxdQUuxjdhqp"
+
+[programs.mainnet]
+skim_protocol = "ECZ6ZsA79WqYEonfJcmSzp51SPg9nSDiTqu4bAxrfvc9"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "node tests/fee-math.test.js"

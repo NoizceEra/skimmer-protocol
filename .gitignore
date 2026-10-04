@@ -1,0 +1,5 @@
+keys/
+bots/telegram/.env
+bots/telegram/data/
+*/node_modules/
+*/dist/
