@@ -273,6 +273,38 @@ a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(-
 }
 .trust-item svg{width:20px;height:20px;flex:0 0 20px;color:var(--mint)}
 
+/* Official contract address */
+.ca-card{
+  margin-top:1.5rem;max-width:560px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-16);padding:.95rem 1rem 1rem;
+}
+.ca-label{
+  display:flex;align-items:center;gap:.5rem;
+  font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--mint);font-weight:600;
+}
+.ca-dot{
+  width:7px;height:7px;border-radius:50%;background:var(--mint);flex:0 0 7px;
+  box-shadow:0 0 0 3px rgba(61,245,165,.18);
+}
+.ca-row{display:flex;align-items:center;gap:.65rem;margin-top:.6rem;flex-wrap:wrap}
+.ca-value{
+  font-family:var(--font-mono);font-size:.82rem;line-height:1.4;color:var(--text);
+  overflow-wrap:anywhere;flex:1 1 240px;min-width:0;
+}
+.ca-copy{
+  display:inline-flex;align-items:center;gap:.45rem;min-height:38px;
+  background:var(--surface-2);border:1px solid var(--border-strong);color:var(--text);
+  border-radius:999px;padding:.5rem .9rem;font:inherit;font-size:.82rem;font-weight:600;
+  cursor:pointer;transition:border-color .2s var(--ease),background .2s var(--ease);
+}
+.ca-copy:hover{background:rgba(255,255,255,.1);border-color:var(--mint)}
+.ca-copy svg{width:15px;height:15px;flex:0 0 15px}
+.ca-note{margin-top:.6rem;font-size:.78rem;line-height:1.5;color:var(--muted)}
+.ca-note a{color:var(--mint);text-decoration:underline;text-underline-offset:2px}
+.ca-status{margin-top:.35rem;font-size:.78rem;line-height:1.4;color:var(--mint);min-height:1.1em}
+
 /* Hero visual */
 .hero-visual{
   position:relative;
@@ -609,6 +641,20 @@ html.anim .reveal.in{opacity:1;transform:none}
               Open Telegram
             </a>
             <a class="btn btn--ghost" href="#how-it-works">See how it works</a>
+          </div>
+
+          <!-- Official $SKIM contract address (mainnet) -->
+          <div class="ca-card">
+            <div class="ca-label"><span class="ca-dot" aria-hidden="true"></span>Official $SKIM contract address</div>
+            <div class="ca-row">
+              <code class="ca-value" id="ca-value">4JzsbtVzawo4dK9thHED3VRXELsDsbwyykQETJ1opump</code>
+              <button class="ca-copy" type="button" id="ca-copy">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M15 5H6a2 2 0 0 0-2 2v9"/></svg>
+                <span>Copy</span>
+              </button>
+            </div>
+            <p class="ca-note">Always verify this address before buying &mdash; imposters post fakes. <a href="https://pump.fun/coin/4JzsbtVzawo4dK9thHED3VRXELsDsbwyykQETJ1opump" target="_blank" rel="noopener noreferrer">View on pump.fun</a></p>
+            <p class="ca-status" id="ca-status" role="status" aria-live="polite"></p>
           </div>
 
           <ul class="trust-strip">
@@ -1124,6 +1170,58 @@ html.anim .reveal.in{opacity:1;transform:none}
   "use strict";
 
   var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------------------------------------------------------
+     Official contract address: copy to clipboard
+     --------------------------------------------------------- */
+  (function () {
+    var btn = document.getElementById("ca-copy");
+    var valueEl = document.getElementById("ca-value");
+    var statusEl = document.getElementById("ca-status");
+    if (!btn || !valueEl) return;
+
+    var ca = valueEl.textContent.trim();
+
+    function flash(ok) {
+      var label = btn.querySelector("span");
+      if (label) label.textContent = ok ? "Copied" : "Copy";
+      if (statusEl) {
+        statusEl.textContent = ok
+          ? "Contract address copied to clipboard."
+          : "Copy failed - select the address and copy it manually.";
+      }
+      if (ok) window.setTimeout(function () {
+        if (label) label.textContent = "Copy";
+      }, 2000);
+    }
+
+    /* Fallback for non-secure contexts and older browsers. */
+    function legacyCopy() {
+      try {
+        var range = document.createRange();
+        range.selectNodeContents(valueEl);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        var ok = document.execCommand("copy");
+        sel.removeAllRanges();
+        return ok;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    btn.addEventListener("click", function () {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(ca).then(
+          function () { flash(true); },
+          function () { flash(legacyCopy()); }
+        );
+      } else {
+        flash(legacyCopy());
+      }
+    });
+  })();
 
   /* Enable reveal animation only when JS + motion are available. Adding this
      class before first paint keeps content visible for no-JS / reduced-motion users. */
