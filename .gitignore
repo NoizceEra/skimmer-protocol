@@ -3,3 +3,6 @@ bots/telegram/.env
 bots/telegram/data/
 */node_modules/
 */dist/
+target/
+*.log
+.fund-deploy.tmp

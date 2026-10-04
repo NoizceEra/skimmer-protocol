@@ -8,10 +8,10 @@ skip-lint = false
 # One program: smart-wallet factory + fee enforcer + user-config tag.
 # NOTE: devnet id is a placeholder. Generate fresh under multisig for mainnet.
 [programs.devnet]
-skim_protocol = "2YHE64pk9NB5NZea7MUGKTdP6zKcjSg4dxdQUuxjdhqp"
+skim_protocol = "EbRLUsTwqTtMi2M9keQCgkaspNUi1JCBMuVb5v5MjTnJ"
 
 [programs.localnet]
-skim_protocol = "2YHE64pk9NB5NZea7MUGKTdP6zKcjSg4dxdQUuxjdhqp"
+skim_protocol = "EbRLUsTwqTtMi2M9keQCgkaspNUi1JCBMuVb5v5MjTnJ"
 
 [programs.mainnet]
 skim_protocol = "ECZ6ZsA79WqYEonfJcmSzp51SPg9nSDiTqu4bAxrfvc9"
