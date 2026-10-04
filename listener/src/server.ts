@@ -34,7 +34,7 @@ app.post('/webhook/tx', async (req, res) => {
   }
 });
 
-const port = Number(process.env.WEBHOOK_PORT ?? 4000);
+const port = Number(process.env.PORT ?? process.env.WEBHOOK_PORT ?? 4000);
 if (require.main === module) {
   app.listen(port, () => console.log(`skim-listener on ${port}`));
 }
