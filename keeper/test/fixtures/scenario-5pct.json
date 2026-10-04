@@ -1,0 +1,36 @@
+{
+  "name": "5pct-basic-sweep",
+  "description": "5% savings bps. 1e9 output at 9 decimals -> skim 50_000_000, fee 4_000_000 (0.4%). Uses a THROWAWAY test-only keeper keypair (never fund it).",
+  "keeper": {
+    "pubkey": "4ajmo42ESWmgVt6avsHpfQKTGxuvYcqZYLwg7yEnQuxn",
+    "secretKey": [37, 91, 183, 221, 3, 221, 108, 172, 24, 107, 216, 130, 126, 59, 197, 76, 212, 86, 129, 24, 142, 182, 129, 84, 231, 36, 216, 203, 127, 33, 42, 45, 53, 55, 151, 28, 219, 18, 185, 12, 190, 177, 136, 237, 113, 231, 238, 168, 116, 32, 155, 49, 126, 96, 174, 138, 251, 253, 95, 223, 115, 152, 58, 123],
+    "solLamports": 50000000
+  },
+  "treasury": "3dzCXtNh62pSMFxCYm9ELCXeffjpzX1mn6JJmYsXJDJn",
+  "config": { "minKeeperLamports": 5000000, "computeUnitLimit": 200000, "priorityFeeMicroLamports": "1000" },
+  "userStore": {
+    "1001": {
+      "authority": "5QjKbGP8mCmbq327CxqkPphbpJT8nthyxCrGGkhBu3sH",
+      "savingsBps": 500,
+      "destination": "J7msiiuRSSmwK2S4xosagtNM5ZrTMWfhis7XimqR1JQL",
+      "delegate": "4ajmo42ESWmgVt6avsHpfQKTGxuvYcqZYLwg7yEnQuxn",
+      "paused": false,
+      "approvedMints": ["Go9eXFSZ2SyzKgYk8yuH26CCt8Yqqjqk973TfmyxDwSE"],
+      "updatedAt": "2026-10-04T00:00:00.000Z"
+    }
+  },
+  "chain": {
+    "sourceAmount": "1000000000",
+    "sourceDelegate": "keeper",
+    "sourceDelegatedAmount": "1000000000",
+    "destinationAmount": "0",
+    "treasuryAmount": "0"
+  },
+  "request": {
+    "user": "5QjKbGP8mCmbq327CxqkPphbpJT8nthyxCrGGkhBu3sH",
+    "mint": "Go9eXFSZ2SyzKgYk8yuH26CCt8Yqqjqk973TfmyxDwSE",
+    "outputAmount": "1000000000",
+    "decimals": 9,
+    "signature": "5pctFixtureSwapSig0000000000000000000000000000000000"
+  }
+}

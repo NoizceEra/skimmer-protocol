@@ -2,16 +2,18 @@
 /**
  * 🛰️ Skimmer Telegram bot — onboarding + status ONLY.
  * No swaps. No buy/sell. Trading happens on other apps.
- * Commands: /start /help /connect /set_rate /set_destination /spawn_wallet
- *           /status /accrued /pause /resume
+ * The bot never holds keys and never signs for the user.
+ * Commands: /start /help /connect /set_rate /set_destination /add_mint
+ *           /spawn_wallet /status /accrued /pause /resume
  */
 import { Bot, InlineKeyboard } from 'grammy';
 import { Connection, PublicKey } from '@solana/web3.js';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-import { getState, saveState, parseBps, bpsToPct } from './store';
-import { fetchStatus, walletPda } from './status';
+import { getState, saveState, parseBps, bpsToPct, addMint, setPaused } from './store';
+import { formatStatus, verifyDelegations, walletPda } from './status';
+import { buildSetupPlans, formatSetupMessage } from './onboarding';
 
 const token = process.env.TELEGRAM_BOT_TOKEN ?? '';
 if (!token) {
@@ -19,6 +21,10 @@ if (!token) {
   process.exit(1);
 }
 const RPC = process.env.RPC_URL ?? 'https://api.devnet.solana.com';
+const KEEPER_DELEGATE = process.env.KEEPER_DELEGATE ?? '';
+const TREASURY = process.env.TREASURY ?? '';
+const PROGRAM_ID = process.env.PROGRAM_ID ?? '2YHE64pk9NB5NZea7MUGKTdP6zKcjSg4dxdQUuxjdhqp';
+const MAX_ALLOWANCE_UI = process.env.MAX_ALLOWANCE_UI ?? '100';
 const connection = new Connection(RPC, 'confirmed');
 const bot = new Bot(token);
 
@@ -29,11 +35,12 @@ const mainKb = () =>
     .text('💰 Rate', 'nav:rate')
     .row()
     .text('🏦 Savings', 'nav:dest')
+    .text('🪙 Mint', 'nav:mint')
+    .row()
     .text('🚀 Wallet', 'nav:wallet')
-    .row()
     .text('📊 Status', 'nav:status')
-    .text('💎 Accrued', 'nav:accrued')
     .row()
+    .text('💎 Accrued', 'nav:accrued')
     .text('❓ Help', 'nav:help');
 
 const WELCOME = [
@@ -41,12 +48,13 @@ const WELCOME = [
   '',
   '🤖 I auto-save a cut of every trade you make — anywhere. You keep trading, I keep skimming. 🏖️',
   '',
-  '👣 *3 tiny steps:*',
+  '👣 *4 tiny steps:*',
   '1️⃣ 🔗 /connect — link your wallet',
   '2️⃣ 💰 /set_rate — pick your cut (e.g. 5)',
   '3️⃣ 🏦 /set_destination — where savings land',
+  '4️⃣ 🪙 /add_mint — the token you trade',
   '',
-  '✅ Then just trade! Every win drops savings in your pot. 🪙',
+  '🚀 Then /spawn_wallet hands you a ONE-TIME bounded approval to sign. ✅ Trade after!',
   '🔑 I never hold your keys. I never trade. I just save. 🛡️',
 ].join('\n');
 
@@ -56,10 +64,11 @@ const HELP = [
   '🔗 /connect — link your trading wallet',
   '💰 /set_rate — your savings cut (0–10%)',
   '🏦 /set_destination — your savings wallet',
-  '🚀 /spawn_wallet — show your skim wallet',
-  '📊 /status — your setup + rate',
+  '🪙 /add_mint — register a token you trade',
+  '🚀 /spawn_wallet — get your one-time approval tx',
+  '📊 /status — your real configured state',
   '💎 /accrued — savings balance',
-  '⏸️ /pause — pause saving',
+  '⏸️ /pause — pause saving (keeper skips you)',
   '▶️ /resume — resume saving',
   '',
   '🚫 No buying or selling here — trade on any app, saving is automatic! ✨',
@@ -78,11 +87,19 @@ bot.command('connect', async (ctx) => {
   try {
     const pk = new PublicKey(arg);
     if (pk.equals(PublicKey.default)) throw new Error('zero address');
-    getState(ctx.chat.id).authority = pk.toBase58();
+    const s = getState(ctx.chat.id);
+    s.authority = pk.toBase58();
+    if (!s.delegate && KEEPER_DELEGATE) s.delegate = KEEPER_DELEGATE;
     saveState(ctx.chat.id);
-    await ctx.reply(`🔗 *Connected!* ✅\n\`${pk.toBase58()}\`\n\nNext: 💰 /set_rate 5`, { parse_mode: 'Markdown' });
+    await ctx.reply(
+      `🔗 *Connected!* ✅\n\`${pk.toBase58()}\`\n\nNext: 💰 /set_rate 5`,
+      { parse_mode: 'Markdown' },
+    );
   } catch {
-    await ctx.reply('🔗 *Connect your wallet:*\n`/connect YOUR_WALLET_ADDRESS`\n\n📌 Paste your Solana address (Phantom, Solflare…).', { parse_mode: 'Markdown' });
+    await ctx.reply(
+      '🔗 *Connect your wallet:*\n`/connect YOUR_WALLET_ADDRESS`\n\n📌 Paste your Solana address (Phantom, Solflare…).',
+      { parse_mode: 'Markdown' },
+    );
   }
 });
 
@@ -105,11 +122,37 @@ bot.command('set_destination', async (ctx) => {
     saveState(ctx.chat.id);
     const s = getState(ctx.chat.id);
     await ctx.reply(
-      `🏦 *Savings pot set!* ✅\n\`${pk.toBase58()}\`\n💰 Rate: ${s.savingsBps ?? '?'} bps\n\n🚀 Finish with /spawn_wallet`,
+      `🏦 *Savings pot set!* ✅\n\`${pk.toBase58()}\`\n💰 Rate: ${s.savingsBps ?? '?'} bps\n\nNext: 🪙 /add_mint MINT (the token you trade) → 🚀 /spawn_wallet`,
       { parse_mode: 'Markdown' },
     );
   } catch {
     await ctx.reply('🏦 *Where should savings land?*\n`/set_destination SAVINGS_WALLET`\n\n💡 Tip: use a separate wallet so savings pile up untouched! 🐷', { parse_mode: 'Markdown' });
+  }
+});
+
+bot.command('add_mint', async (ctx) => {
+  const arg = ctx.match.toString().trim();
+  try {
+    const pk = new PublicKey(arg);
+    if (pk.equals(PublicKey.default)) throw new Error('zero address');
+    const added = addMint(ctx.chat.id, pk.toBase58());
+    const s = getState(ctx.chat.id);
+    await ctx.reply(
+      [
+        added ? `🪙 *Mint registered!* ✅` : `🪙 *Mint already registered.*`,
+        `\`${pk.toBase58()}\``,
+        ``,
+        `Total mints: ${s.approvedMints?.length ?? 0}`,
+        ``,
+        `Next: 🚀 /spawn_wallet to get your one-time approval tx.`,
+      ].join('\n'),
+      { parse_mode: 'Markdown' },
+    );
+  } catch {
+    await ctx.reply(
+      '🪙 *Register a token you trade:*\n`/add_mint MINT_ADDRESS`\n\n💡 SOL (wrapped) = So111…1112 · USDC = EPjFWdd5…Dt1v',
+      { parse_mode: 'Markdown' },
+    );
   }
 });
 
@@ -127,37 +170,77 @@ bot.command('spawn_wallet', async (ctx) => {
     await ctx.reply('🏦 First set savings: /set_destination YOUR_SAVINGS_WALLET');
     return;
   }
-  const [pda] = walletPda(new PublicKey(s.authority));
-  s.wallet = pda.toBase58();
+  s.wallet = walletPda(new PublicKey(s.authority))[0].toBase58();
+
+  // The keeper delegate whose bounded approval the user grants.
+  const delegate = s.delegate || KEEPER_DELEGATE;
+  if (!delegate) {
+    saveState(ctx.chat.id);
+    await ctx.reply(
+      '⚙️ Protocol not configured — the operator must set KEEPER_DELEGATE in the bot environment. Nothing to sign yet.',
+    );
+    return;
+  }
+  s.delegate = delegate;
+
+  const mints = (s.approvedMints ?? []).slice();
+  if (mints.length === 0) {
+    saveState(ctx.chat.id);
+    await ctx.reply(
+      [
+        `🚀 *Your skim wallet PDA:* \`${s.wallet}\``,
+        ``,
+        `🪙 I still need the token(s) you trade so I can build a BOUNDED approval.`,
+        `Register each mint, then re-run /spawn_wallet:`,
+        `\`/add_mint MINT_ADDRESS\``,
+        ``,
+        `💡 SOL (wrapped) = \`So11111111111111111111111111111111111111112\``,
+        `💡 USDC = \`EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\``,
+      ].join('\n'),
+      { parse_mode: 'Markdown' },
+    );
+    return;
+  }
+
   saveState(ctx.chat.id);
-  await ctx.reply(
-    [
-      `🚀 *Your skim wallet is ready!* 🎉`,
-      `\`${pda.toBase58()}\``,
-      ``,
-      `👤 Owner: \`${s.authority}\``,
-      `💰 Saves ${bpsToPct(s.savingsBps)}% of every trade → 🏦 savings 🪙`,
-      `⛽ Tiny 0.4% keeps the protocol running.`,
-      ``,
-      `✅ You're set! Go trade anywhere — saving is automatic! ✨`,
-      `🔑 Sign the setup in your wallet app — I never touch keys. 🛡️`,
-    ].join('\n'),
-    { parse_mode: 'Markdown' },
-  );
+  await ctx.reply(`🚀 Building your one-time, bounded approval tx for ${mints.length} mint(s)… 🔧`);
+  try {
+    const plans = await buildSetupPlans(connection, {
+      user: s.authority,
+      keeperDelegate: delegate,
+      savingsBps: s.savingsBps,
+      mints,
+      topUps: 20,
+      maxUiAmount: MAX_ALLOWANCE_UI,
+    });
+    for (const plan of plans) {
+      // Plain text (no Markdown) so the base64 blob can never break an entity.
+      await ctx.reply(
+        formatSetupMessage(plan, {
+          user: s.authority,
+          savingsBps: s.savingsBps as number,
+          delegate,
+        }),
+      );
+    }
+    await ctx.reply(
+      `✅ Done. That is everything — approve the tx in YOUR wallet and go trade anywhere! 🔑 I never see your keys.`,
+    );
+  } catch (e: any) {
+    await ctx.reply(`😅 Couldn't build the approval tx: ${e.message}`);
+  }
 });
 
 bot.command('status', async (ctx) => {
   const s = getState(ctx.chat.id);
+  const text = formatStatus(s);
   if (!s.authority) {
-    await ctx.reply('🔗 Link a wallet first: /connect YOUR_WALLET 🙂', { reply_markup: mainKb() });
+    await ctx.reply(text, { reply_markup: mainKb(), parse_mode: 'Markdown' });
     return;
   }
-  try {
-    const text = await fetchStatus(connection, new PublicKey(s.authority));
-    await ctx.reply(text, { parse_mode: 'Markdown' });
-  } catch (e: any) {
-    await ctx.reply('📊 Status hiccup 😅: ' + e.message + '\nTry again in a sec! 🔄');
-  }
+  // Read the REAL configured state from the shared store; enrich best-effort with chain.
+  const chain = await verifyDelegations(connection, s);
+  await ctx.reply(chain ? `${text}\n\n${chain}` : text, { parse_mode: 'Markdown' });
 });
 
 bot.command('accrued', async (ctx) => {
@@ -178,11 +261,35 @@ bot.command('accrued', async (ctx) => {
 });
 
 bot.command('pause', async (ctx) => {
-  await ctx.reply('⏸️ *Pause saving:* sign “pause” on your savings setup in your wallet app. 🔑\n\n💡 I can’t pause for you — I never hold keys! Your funds stay safe either way. 🛡️', { parse_mode: 'Markdown' });
+  const s = getState(ctx.chat.id);
+  if (!s.authority) {
+    await ctx.reply('🔗 Link a wallet first: /connect YOUR_WALLET 🙂');
+    return;
+  }
+  setPaused(ctx.chat.id, true);
+  await ctx.reply(
+    [
+      `⏸️ *Saving paused.*`,
+      ``,
+      `I recorded ⏸️ paused = true in your shared config, which the keeper reads — so it will skip your sweeps.`,
+      ``,
+      `⚠️ Honest note: pausing the keeper is not the same as REVOKING its on-chain permission. To revoke the delegate entirely you must additionally sign an SPL Revoke (or a 0-amount approve) from your wallet — I never hold keys, so I can't sign it for you. Run 🚀 /spawn_wallet for the tx blob, or approve 0 on that token account.`,
+    ].join('\n'),
+    { parse_mode: 'Markdown' },
+  );
 });
 
 bot.command('resume', async (ctx) => {
-  await ctx.reply('▶️ *Resume saving:* sign “resume” on your savings setup in your wallet app. 🚀\n\n💰 Back to stacking every trade! 🪙', { parse_mode: 'Markdown' });
+  const s = getState(ctx.chat.id);
+  if (!s.authority) {
+    await ctx.reply('🔗 Link a wallet first: /connect YOUR_WALLET 🙂');
+    return;
+  }
+  setPaused(ctx.chat.id, false);
+  await ctx.reply(
+    `▶️ *Saving resumed!* 🚀\n\n⏸️ paused = false is recorded. The keeper will sweep your cut on your next trade. 💰`,
+    { parse_mode: 'Markdown' },
+  );
 });
 
 // 🚫 Explicit: no trading surface.
@@ -203,8 +310,11 @@ bot.on('callback_query:data', async (ctx) => {
     case 'nav:dest':
       await ctx.reply('🏦 Tap then type:\n`/set_destination SAVINGS_WALLET` 🐷', { parse_mode: 'Markdown' });
       break;
+    case 'nav:mint':
+      await ctx.reply('🪙 Tap then type:\n`/add_mint MINT_ADDRESS`\n\n💡 SOL (wrapped) = `So11111111111111111111111111111111111111112`', { parse_mode: 'Markdown' });
+      break;
     case 'nav:wallet':
-      await ctx.reply('🚀 Run /spawn_wallet to see your skim wallet! 🎉');
+      await ctx.reply('🚀 Run /spawn_wallet to get your one-time approval tx! 🎉');
       break;
     case 'nav:status':
       await ctx.reply('📊 Run /status for your live setup! ⚡');

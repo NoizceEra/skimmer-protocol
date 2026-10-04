@@ -4,12 +4,13 @@
   "private": true,
   "description": "Skim Protocol Telegram — onboarding + status ONLY. No trading.",
   "type": "commonjs",
-  "main": "src/bot.js",
+  "main": "dist/bot.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "start": "node src/bot.js",
-    "dev": "npm run build && node src/bot.js"
+    "start": "node dist/bot.js",
+    "dev": "npm run build && node dist/bot.js",
+    "test": "npm run build && node --test"
   },
   "dependencies": {
     "@solana/web3.js": "^1.98.4",

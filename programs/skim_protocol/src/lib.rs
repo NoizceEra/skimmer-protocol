@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::get_associated_token_address;
 use anchor_spl::token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked};
 
-declare_id!("EbRLUsTwqTtMi2M9keQCgkaspNUi1JCBMuVb5v5MjTnJ");
+declare_id!("2YHE64pk9NB5NZea7MUGKTdP6zKcjSg4dxdQUuxjdhqp");
 
 const MAX_SAVINGS_BPS: u16 = 1000; // 10%
 const MAX_FEE_BPS: u16 = 1000; // 10%

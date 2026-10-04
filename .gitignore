@@ -1,4 +1,5 @@
 keys/
+/data/
 bots/telegram/.env
 bots/telegram/data/
 */node_modules/

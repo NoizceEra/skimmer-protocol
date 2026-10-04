@@ -12,7 +12,7 @@
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="Skimmer Protocol" />
 <meta property="og:title" content="Skimmer Protocol — Pay Yourself First" />
-<meta property="og:description" content="Set a rate once. Trade anywhere. Every trade pays you first — automatically, into your own wallet. Non-custodial and revocable." />
+<meta property="og:description" content="Set a rate once. Trade anywhere. You pay yourself first on every trade — automatically, into your own wallet. Non-custodial and revocable." />
 <meta property="og:url" content="https://skimmer-protocol.vercel.app/" />
 <meta property="og:image" content="https://skimmer-protocol.vercel.app/og-image.png" />
 <meta property="og:image:width" content="1200" />
@@ -22,7 +22,7 @@
 <!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="Skimmer Protocol — Pay Yourself First" />
-<meta name="twitter:description" content="Set a rate once. Trade anywhere. Every trade pays you first — automatically, into your own wallet." />
+<meta name="twitter:description" content="Set a rate once. Trade anywhere. You pay yourself first on every trade — automatically, into your own wallet." />
 <meta name="twitter:image" content="https://skimmer-protocol.vercel.app/og-image.png" />
 
 <!-- Icons / manifest (exact head links) -->
@@ -213,6 +213,7 @@ a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(-
   transition:color .2s var(--ease), background .2s var(--ease);
 }
 .nav-menu a:hover{color:var(--text);background:var(--surface)}
+.nav-menu a.btn--primary{color:#04120C}
 .nav-cta{display:flex;align-items:center;gap:10px}
 .nav-toggle{
   display:none;align-items:center;justify-content:center;
@@ -244,7 +245,7 @@ a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(-
   .nav-menu .btn{margin-top:8px}
 }
 @media (min-width:881px){
-  .nav-menu .menu-cta{display:none}
+  .nav-menu .nav-menu-cta{display:none}
 }
 
 /* ============================================================
@@ -306,7 +307,7 @@ a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(-
 .vs-card.good{background:linear-gradient(160deg,rgba(61,245,165,.1),rgba(91,140,255,.05));border:1px solid rgba(61,245,165,.26)}
 .vs-card h3{font-size:clamp(1.25rem,2.2vw,1.6rem);margin-bottom:.7rem}
 .vs-card .tag{
-  font-family:var(--font-mono);font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;
+  font-family:var(--font-mono);font-size:.78rem;letter-spacing:.1em;text-transform:uppercase;
   display:inline-block;margin-bottom:1rem;padding:.3rem .6rem;border-radius:6px;
 }
 .vs-card.bad .tag{color:var(--danger);background:rgba(255,128,152,.12)}
@@ -400,6 +401,11 @@ input[type="range"]::-moz-range-thumb{
   color:var(--mint);font-size:1.05rem;min-width:3.6ch;text-align:right;display:inline-block;
 }
 .range-scale{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:.75rem;color:var(--muted-2);margin-top:-.4rem}
+.rate-row{display:flex;align-items:flex-start;gap:16px}
+.rate-slider{flex:1 1 auto;min-width:0}
+.field .rate-num{flex:0 0 auto;display:flex;align-items:center;gap:.55rem}
+.field .rate-num .rate-num-label{font-weight:600;font-size:.82rem;color:var(--muted-2);line-height:1;margin:0;white-space:nowrap}
+.field .rate-num input[type="number"]{width:76px;min-height:44px;padding:.5rem .5rem;text-align:center;font-size:1rem}
 
 .calc-output{display:flex;flex-direction:column;gap:14px}
 .out-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -568,7 +574,7 @@ html.anim .reveal.in{opacity:1;transform:none}
         <li><a href="#calculator">Calculator</a></li>
         <li><a href="#why">Why Skimmer</a></li>
         <li><a href="#faq">FAQ</a></li>
-        <li><a class="btn btn--primary" href="https://t.me/SkimmerProtocol_Bot">Open Telegram</a></li>
+        <li class="nav-menu-cta"><a class="btn btn--primary menu-cta" href="https://t.me/SkimmerProtocol_Bot">Open Telegram</a></li>
       </ul>
 
       <div class="nav-cta">
@@ -641,7 +647,7 @@ html.anim .reveal.in{opacity:1;transform:none}
               <rect x="30" y="60" width="150" height="70" rx="16" fill="rgba(255,255,255,.05)" stroke="rgba(255,255,255,.16)"/>
             </g>
             <text x="105" y="92" text-anchor="middle" fill="#E9EFF8" font-family="Space Grotesk, sans-serif" font-size="15" font-weight="600">You trade</text>
-            <text x="105" y="113" text-anchor="middle" fill="#A9B4C7" font-family="Inter, sans-serif" font-size="12">5% rate set once</text>
+            <text x="105" y="113" text-anchor="middle" fill="#A9B4C7" font-family="Inter, sans-serif" font-size="14">5% rate set once</text>
 
             <!-- Flow line -->
             <path id="mainFlow" d="M180 95 H 250" fill="none" stroke="url(#flowGrad)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="6 8"/>
@@ -658,18 +664,18 @@ html.anim .reveal.in{opacity:1;transform:none}
 
             <!-- Keep node -->
             <rect x="335" y="28" width="155" height="58" rx="14" fill="rgba(255,255,255,.04)" stroke="rgba(255,255,255,.12)"/>
-            <text x="412" y="54" text-anchor="middle" fill="#A9B4C7" font-family="Space Grotesk, sans-serif" font-size="13" font-weight="600">You keep ~95%</text>
-            <text x="412" y="72" text-anchor="middle" fill="#8B97AC" font-family="Inter, sans-serif" font-size="11">stays in your wallet</text>
+            <text x="412" y="54" text-anchor="middle" fill="#A9B4C7" font-family="Space Grotesk, sans-serif" font-size="14" font-weight="600">You keep ~95%</text>
+            <text x="412" y="72" text-anchor="middle" fill="#A9B4C7" font-family="Inter, sans-serif" font-size="14">stays in your wallet</text>
 
             <!-- Savings node -->
             <rect x="335" y="150" width="155" height="70" rx="16" fill="rgba(61,245,165,.12)" stroke="rgba(61,245,165,.4)"/>
-            <text x="412" y="180" text-anchor="middle" fill="#3DF5A5" font-family="Space Grotesk, sans-serif" font-size="13" font-weight="700">Savings wallet</text>
-            <text x="412" y="199" text-anchor="middle" fill="#A9B4C7" font-family="Inter, sans-serif" font-size="11">builds every trade</text>
+            <text x="412" y="180" text-anchor="middle" fill="#3DF5A5" font-family="Space Grotesk, sans-serif" font-size="14" font-weight="700">Savings wallet</text>
+            <text x="412" y="199" text-anchor="middle" fill="#A9B4C7" font-family="Inter, sans-serif" font-size="14">builds every trade</text>
 
             <!-- Savings jar / bar -->
             <g transform="translate(60,220)">
               <rect x="0" y="0" width="390" height="150" rx="18" fill="rgba(255,255,255,.03)" stroke="rgba(255,255,255,.09)"/>
-              <text x="22" y="34" fill="#A9B4C7" font-family="JetBrains Mono, monospace" font-size="12" letter-spacing="1">SAVINGS GROWTH</text>
+              <text x="22" y="34" fill="#A9B4C7" font-family="JetBrains Mono, monospace" font-size="14" letter-spacing="1">SAVINGS GROWTH</text>
               <g transform="translate(24,58)">
                 <rect x="0" y="60" width="26" height="30" rx="6" fill="rgba(61,245,165,.28)"/>
                 <rect x="46" y="44" width="26" height="46" rx="6" fill="rgba(61,245,165,.42)"/>
@@ -713,7 +719,7 @@ html.anim .reveal.in{opacity:1;transform:none}
 
         <article class="vs-card good reveal" style="--d:120ms">
           <span class="tag">Skimmer</span>
-          <h3>Skimmer pays you first</h3>
+          <h3>Your cut comes out first</h3>
           <p>You set a rate once. Seconds after every trade, that percentage of your output routes straight into your own savings wallet — automatically, unattended, yours.</p>
           <ul class="vs-list">
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l5 5L20 6"/></svg>Your cut lands in your own wallet, every time</li>
@@ -731,7 +737,7 @@ html.anim .reveal.in{opacity:1;transform:none}
       <div class="section-head center reveal">
         <span class="eyebrow">Three steps</span>
         <h2 class="section-title" id="how-title">How it works</h2>
-        <p class="lead">One setup. No maintenance. From here, every trade pays you first.</p>
+        <p class="lead">One setup. No maintenance. From here, you pay yourself first on every trade.</p>
       </div>
 
       <ol class="steps">
@@ -770,28 +776,28 @@ html.anim .reveal.in{opacity:1;transform:none}
             <circle cx="65" cy="46" r="18" fill="none" stroke="#3DF5A5" stroke-width="1.8"/>
             <path d="M55 50c4 0 5-8 10-8" fill="none" stroke="#3DF5A5" stroke-width="2" stroke-linecap="round"/>
             <text x="65" y="86" text-anchor="middle" fill="#E9EFF8" font-family="Space Grotesk, sans-serif" font-size="13" font-weight="600">You + wallet</text>
-            <text x="65" y="104" text-anchor="middle" fill="#8B97AC" font-family="Inter, sans-serif" font-size="11">keys stay yours</text>
+            <text x="65" y="104" text-anchor="middle" fill="#A9B4C7" font-family="Inter, sans-serif" font-size="13">keys stay yours</text>
           </g>
           <g transform="translate(290,40)">
             <rect width="150" height="120" rx="16" fill="rgba(91,140,255,.08)" stroke="rgba(91,140,255,.28)"/>
             <path d="M42 52l18-8 18 8-18 8z" fill="none" stroke="#5B8CFF" stroke-width="1.8" stroke-linejoin="round"/>
             <path d="M48 60v10c0 3 6 6 12 6s12-3 12-6V60" fill="none" stroke="#5B8CFF" stroke-width="1.8" stroke-linecap="round"/>
             <text x="75" y="98" text-anchor="middle" fill="#E9EFF8" font-family="Space Grotesk, sans-serif" font-size="13" font-weight="600">Set once</text>
-            <text x="75" y="116" text-anchor="middle" fill="#8B97AC" font-family="Inter, sans-serif" font-size="11">1&ndash;10% rate</text>
+            <text x="75" y="116" text-anchor="middle" fill="#A9B4C7" font-family="Inter, sans-serif" font-size="13">1&ndash;10% rate</text>
           </g>
           <g transform="translate(560,40)">
             <rect width="150" height="120" rx="16" fill="rgba(139,92,246,.08)" stroke="rgba(139,92,246,.28)"/>
             <path d="M45 68l15-24 15 24z" fill="none" stroke="#8B5CF6" stroke-width="1.8" stroke-linejoin="round"/>
             <path d="M45 74h15M60 68h15" stroke="#8B5CF6" stroke-width="1.8" stroke-linecap="round"/>
             <text x="75" y="98" text-anchor="middle" fill="#E9EFF8" font-family="Space Grotesk, sans-serif" font-size="13" font-weight="600">Trade anywhere</text>
-            <text x="75" y="116" text-anchor="middle" fill="#8B97AC" font-family="Inter, sans-serif" font-size="11">any Solana app</text>
+            <text x="75" y="116" text-anchor="middle" fill="#A9B4C7" font-family="Inter, sans-serif" font-size="13">any Solana app</text>
           </g>
           <g transform="translate(830,40)">
             <rect width="150" height="120" rx="16" fill="rgba(61,245,165,.12)" stroke="rgba(61,245,165,.36)"/>
             <rect x="45" y="34" width="60" height="44" rx="8" fill="none" stroke="#3DF5A5" stroke-width="1.8"/>
             <path d="M52 66V56M67 66V48M82 66V40" stroke="#3DF5A5" stroke-width="2.4" stroke-linecap="round"/>
             <text x="75" y="98" text-anchor="middle" fill="#3DF5A5" font-family="Space Grotesk, sans-serif" font-size="13" font-weight="700">Savings grows</text>
-            <text x="75" y="116" text-anchor="middle" fill="#8B97AC" font-family="Inter, sans-serif" font-size="11">auto, every trade</text>
+            <text x="75" y="116" text-anchor="middle" fill="#A9B4C7" font-family="Inter, sans-serif" font-size="13">auto, every trade</text>
           </g>
         </svg>
       </figure>
@@ -821,9 +827,18 @@ html.anim .reveal.in{opacity:1;transform:none}
 
           <div class="field">
             <label for="calc-rate">Savings rate <span class="rate-readout" id="calc-rate-out">5%</span></label>
-            <input type="range" id="calc-rate" name="calc-rate" min="1" max="10" step="1" value="5"
-                   aria-describedby="calc-rate-help" aria-valuetext="5 percent of each trade" />
-            <div class="range-scale" aria-hidden="true"><span>1%</span><span>10%</span></div>
+            <div class="rate-row">
+              <div class="rate-slider">
+                <input type="range" id="calc-rate" name="calc-rate" min="1" max="10" step="1" value="5"
+                       aria-describedby="calc-rate-help" aria-valuetext="5 percent of each trade" />
+                <div class="range-scale" aria-hidden="true"><span>1%</span><span>10%</span></div>
+              </div>
+              <div class="rate-num">
+                <label for="calc-rate-num" class="rate-num-label">Exact&nbsp;%</label>
+                <input type="number" id="calc-rate-num" name="calc-rate-num" min="1" max="10" step="1" value="5"
+                       inputmode="numeric" aria-describedby="calc-rate-help" />
+              </div>
+            </div>
             <span class="hint" id="calc-rate-help">Between 1% and 10% of each trade's output. 10% is the on-chain cap.</span>
           </div>
 
@@ -848,8 +863,8 @@ html.anim .reveal.in{opacity:1;transform:none}
             <div class="out highlight"><div class="k">Per year</div><div class="v" id="out-year">$73,000</div></div>
           </div>
           <div class="contrast" id="out-contrast">
-            <span class="give" id="out-contrast-give">Skimmer pays you $73,000/year;</span>
-            a 1% hidden fee would take <span class="take" id="out-contrast-take">$14,600/year</span> from you.
+            <span class="give" id="out-contrast-give">You keep $73,000/year.</span>
+            A 1% hidden fee would quietly take <span class="take" id="out-contrast-take">$14,600/year</span>.
           </div>
         </div>
       </div>
@@ -1043,7 +1058,7 @@ html.anim .reveal.in{opacity:1;transform:none}
             <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
           </button></h3>
           <div class="faq-a" id="faq-p7" role="region" aria-labelledby="faq-b7">
-            <div class="faq-a-inner">Skimmer routes a percentage of every trade's output token. Whatever token a trade pays you in is the token your savings cut is taken from, so it works across the tokens you actually trade.</div>
+            <div class="faq-a-inner">Skimmer routes a percentage of every trade's output token. Whatever token a trade pays out is the token your savings cut is taken from, so it works across the tokens you actually trade.</div>
           </div>
         </div>
       </div>
@@ -1157,6 +1172,27 @@ html.anim .reveal.in{opacity:1;transform:none}
     if (!navMenu.contains(e.target) && !navToggle.contains(e.target)) closeMenu();
   });
 
+  // The CTA duplicated inside the mobile panel must be inert at desktop
+  // widths (not rendered, not focusable, not announced) while staying a
+  // normal focusable button inside the open mobile menu.
+  (function () {
+    var menuCta = document.querySelector(".nav-menu .menu-cta");
+    if (!menuCta) return;
+    var mq = window.matchMedia("(min-width: 881px)");
+    function syncMenuCta() {
+      if (mq.matches) {
+        menuCta.setAttribute("aria-hidden", "true");
+        menuCta.setAttribute("tabindex", "-1");
+      } else {
+        menuCta.removeAttribute("aria-hidden");
+        menuCta.removeAttribute("tabindex");
+      }
+    }
+    syncMenuCta();
+    if (mq.addEventListener) mq.addEventListener("change", syncMenuCta);
+    else if (mq.addListener) mq.addListener(syncMenuCta);
+  })();
+
   /* ---------------------------------------------------------
      3) FAQ accordion (aria-expanded + aria-controls)
      --------------------------------------------------------- */
@@ -1217,6 +1253,7 @@ html.anim .reveal.in{opacity:1;transform:none}
   var sizeEl = document.getElementById("calc-size");
   var rateEl = document.getElementById("calc-rate");
   var rateOutEl = document.getElementById("calc-rate-out");
+  var rateNumEl = document.getElementById("calc-rate-num");
   var tradesEl = document.getElementById("calc-trades");
 
   var outTrade = document.getElementById("out-trade");
@@ -1254,7 +1291,7 @@ html.anim .reveal.in{opacity:1;transform:none}
     outMonth.textContent = usd.format(savedPerMonth);
     outYear.textContent = usd.format(savedPerYear);
 
-    outGive.textContent = "Skimmer pays you " + usd.format(savedPerYear) + "/year;";
+    outGive.textContent = "You keep " + usd.format(savedPerYear) + "/year.";
     outTake.textContent = usd.format(hiddenFeeYear) + "/year";
 
     // Range slider: fill + accessible value text
@@ -1264,10 +1301,41 @@ html.anim .reveal.in{opacity:1;transform:none}
     rateEl.setAttribute("aria-valuetext", ratePct + " percent of each trade");
   }
 
-  [sizeEl, rateEl, tradesEl].forEach(function (el) {
+  [sizeEl, tradesEl].forEach(function (el) {
     el.addEventListener("input", compute);
     el.addEventListener("change", compute);
   });
+
+  // The slider stays the source of truth; mirror it into the numeric field.
+  rateEl.addEventListener("input", function () {
+    if (rateNumEl) rateNumEl.value = rateEl.value;
+    compute();
+  });
+
+  // Numeric field -> slider + live results. Clamp to 1..10 and ignore
+  // empty / non-numeric input so the page and the live region never break.
+  function readRateField() {
+    if (!rateNumEl) return null;
+    var raw = String(rateNumEl.value).trim();
+    if (raw === "") return null;
+    var n = Number(raw);
+    if (!isFinite(n)) return null;
+    return Math.min(10, Math.max(1, Math.round(n)));
+  }
+  function normalizeRateField() {
+    var v = readRateField();
+    rateNumEl.value = (v === null) ? rateEl.value : String(v);
+  }
+  if (rateNumEl) {
+    rateNumEl.addEventListener("input", function () {
+      var v = readRateField();
+      if (v === null) return;
+      rateEl.value = String(v);
+      compute();
+    });
+    rateNumEl.addEventListener("change", normalizeRateField);
+    rateNumEl.addEventListener("blur", normalizeRateField);
+  }
 
   compute();
 

@@ -1,54 +1,57 @@
-# 💰 Skimmer Protocol — SOL cost breakdown
+# 💰 Skimmer Protocol — cost breakdown (minimal v1)
 
-Math anchored to real devnet deploy receipts from this team's prior build
-(`SAS-Vaults-Skim/MAINNET_COST_REPORT.md`): program rent formula
-`(size + 45) × 6,960 lamports`, validated within 0.005 SOL of the on-chain balance
-(210,368 B → 1.0696 SOL). SOL ≈ $120 at report time — recheck before funding.
+**v1 does not deploy a custom on-chain program.** The rail is plain SPL Token
+(`Approve` + `TransferChecked`), so one-time on-chain cost is **$0** and monthly
+infra targets **$0–5**. See `docs/MINIMAL_DEPLOY.md` for the runbook.
 
-## One-time: program deploy
+SOL used below: **$120.89**, and the rent figure is the **live** devnet/mainnet
+rent: `(size + 128) × 5080` lamports — i.e. `solana rent <size>`. (The old
+`(size + 45) × 6960` formula this file used before is the obsolete
+6960-lamports/byte-year constant; it overstates rent ~27%.)
+
+## One-time: v1
 
 | Item | SOL | Notes |
 |---|---:|---|
-| `skim_protocol` rent (~150–210 KB est.) | ~1.0–1.1 | Our program is smaller than the 210 KB reference; budget the full 1.1 |
-| Deploy tx fees | ~0.0002 | |
-| Retry / upgrade buffer | 0.5 | Failed deploys still cost rent — don't skip this |
-| **Fund the deployer wallet with** | **~1.6** | **≈ $190 @ $120/SOL** |
-| Expected actual spend | ~1.1 | ≈ $130 |
+| Program deploy | **0** | No program needed for the used rail. |
+| Deploy tx fees | **0** | Nothing to deploy. |
+| **Total** | **0** | **$0** |
 
-After `anchor build`, get the exact byte size of `target/deploy/skim_protocol.so`
-and compute `(size + 45) × 6960 / 1e9` for the precise rent.
+If you *choose* to keep the Anchor program deployed (it is only needed for the
+deferred session/PDA rail), the 328,912-byte build rents for **1.67152320 SOL**
+locked — see `docs/DEPLOYMENT_COSTS.md`. The program already live on devnet is
+**free faucet SOL**, so keeping it costs nothing in real money.
 
-## Per user (paid by whoever signs setup — user or you)
+## Monthly: v1
 
-| Item | SOL |
-|---|---:|
-| `UserSavingsConfig` PDA (~108 B) | ~0.0012 |
-| `SmartWallet` PDA (~110 B) | ~0.0013 |
-| `SessionKey` PDA (only if session rail used) | ~0.004 |
-| Setup tx fees | ~0.00001 |
-| **Typical total per user** | **~$0.30–0.50** |
+| Item | Cost | Notes |
+|---|---:|---|
+| Host (one process) | $0–5 | Own PC = $0; Railway Hobby = $5/mo (includes $5 usage). |
+| RPC | $0 | Public devnet RPC; Helius Free if a webhook is used. |
+| Static site | $0 | Cloudflare Pages / GitHub Pages (Vercel Hobby is non-commercial-only). |
+| Domain | $0 | `*.pages.dev` / `*.github.io` subdomain. |
+| **Total** | **$0–5** | |
 
-Pennies. Subsidize it if you want zero-friction onboarding.
-
-## Per trade (paid by keeper, covered by your 0.4%)
+## Per user (v1)
 
 | Item | SOL |
 |---|---:|
-| Sweep tx (1 sig + priority fee) | ~0.00026 (~$0.03) |
+| SPL `Approve` setup tx (user signs once) | ~0.000005 (base fee) |
+| Per-mint allowance top-up (later re-approve) | ~0.000005 |
+| **Typical total per user** | **pennies** |
 
-One average trade's 0.4% fee dwarfs this. Profitable from trade one.
+## Per sweep (paid by the keeper)
 
-## Monthly recurring
+| Item | SOL |
+|---|---:|
+| Sweep tx (2× `TransferChecked`, 1 signature, base fee) | 0.000005 |
+| First sweep of a **new mint** (+ destination ATA rent) | 0.00148844 |
+| Priority fee (optional, network-dependent) | ~0.000005–0.0001 |
 
-| Item | Cost |
-|---|---|
-| Railway (bot + listener + keeper) | $5–20 |
-| RPC (Helius/QuickNode; free tier to start) | $0–50+ by volume |
-| Vercel marketing site | $0 (hobby) |
+**Keeper gas:** devnet = $0 (faucet). Mainnet = a **held float**, not a subscription;
+**0.2–0.5 SOL** is plenty for a small beta (1 SOL ≈ 200,000 base-fee sweeps).
 
-## Launch budget
+## Guide
 
-| Scenario | Total |
-|---|---|
-| Devnet trial (play money) | **$0** |
-| Mainnet launch | **~1.6 SOL + $5–20/mo infra** |
+- Minimal launch: `docs/MINIMAL_DEPLOY.md` ($0–5/mo).
+- Full cost model + sources + deferred/full stack: `docs/DEPLOYMENT_COSTS.md`.

@@ -1,22 +1,27 @@
 @echo off
-REM Devnet fund-and-deploy loop for skim_protocol.
-REM Retries the throttled devnet faucet; deploys once balance covers rent (~2.29 SOL).
-REM Logs to fund-deploy.log. Exits after deploy (or after 72 tries = ~6h).
+REM Devnet fund + IN-PLACE UPGRADE loop for the LIVE program.
+REM Upgrades an existing program: NO new program keypair, only the temporary
+REM buffer rent (refunded) + a small permanent program-data top-up + fees.
+REM v1 does NOT need this at all (plain SPL rail) -- see docs/MINIMAL_DEPLOY.md.
+REM
+REM Correct devnet rent: (size+128)*5080 lamports (NOT the obsolete *6960).
+REM   .so = 328,912 B -> buffer rent 1.67152320 SOL (refunded), top-up ~0.0304 SOL.
 setlocal EnableDelayedExpansion
 cd /d D:\ai-studio\skim-protocol
-echo [%date% %time%] fund-deploy loop started >> fund-deploy.log
+set PROGRAM_ID=2YHE64pk9NB5NZea7MUGKTdP6zKcjSg4dxdQUuxjdhqp
+set AUTHKEY=%USERPROFILE%\.config\solana\deployer.json
+echo [%date% %time%] upgrade loop started >> fund-deploy.log
 for /L %%i in (1,1,72) do (
   set BALSTR=
-  for /f "tokens=1" %%s in ('solana balance --keypair keys\deployer-devnet.json --url devnet 2^>nul') do set BALSTR=%%s
+  for /f "tokens=1" %%s in ('solana balance --keypair "%AUTHKEY%" --url devnet 2^>nul') do set BALSTR=%%s
   echo [%date% %time%] try %%i balance=!BALSTR! >> fund-deploy.log
-  if "!BALSTR!" NEQ "" if !BALSTR! GEQ 3 (
-    echo [%date% %time%] FUNDED (!BALSTR! SOL) - deploying >> fund-deploy.log
-    solana program deploy target\deploy\skim_protocol.so --program-id target\deploy\skim_protocol-keypair.json --url devnet --keypair keys\deployer-devnet.json >> fund-deploy.log 2>&1
-    echo [%date% %time%] deploy attempt done, verifying >> fund-deploy.log
-    solana program show EbRLUsTwqTtMi2M9keQCgkaspNUi1JCBMuVb5v5MjTnJ --url devnet >> fund-deploy.log 2>&1
+  if "!BALSTR!" NEQ "" if !BALSTR! GEQ 2 (
+    echo [%date% %time%] FUNDED (!BALSTR! SOL) - upgrading %PROGRAM_ID% >> fund-deploy.log
+    solana program deploy target\deploy\skim_protocol.so --program-id %PROGRAM_ID% --upgrade-authority "%AUTHKEY%" --url devnet >> fund-deploy.log 2>&1
+    solana program show %PROGRAM_ID% --url devnet >> fund-deploy.log 2>&1
     exit /b 0
   )
-  solana airdrop 1 PDvLyuHBXA2qcHySMzE9bE8f89nDGx6nFceGhVDdH4M --url devnet >> fund-deploy.log 2>&1
+  solana airdrop 1 95DmM5xt695F18s7ouhRHf9wETgyUKxWYWa9z5gma6YG --url devnet >> fund-deploy.log 2>&1
   timeout /t 300 /nobreak >nul
 )
 echo [%date% %time%] gave up after 72 tries >> fund-deploy.log

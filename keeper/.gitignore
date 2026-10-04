@@ -1,0 +1,6 @@
+# Runtime-only keeper state (dedupe, retry queue, dead-letter log).
+.state/
+# Local secrets / overrides.
+.env
+# Test scratch dirs.
+test/.tmp/

@@ -1,0 +1,36 @@
+{
+  "name": "10pct-max-sweep",
+  "description": "10% savings bps (program MAX_SAVINGS_BPS). 2e9 output at 6 decimals -> skim 200_000_000, fee 8_000_000 (0.4%). Uses a THROWAWAY test-only keeper keypair (never fund it).",
+  "keeper": {
+    "pubkey": "4ajmo42ESWmgVt6avsHpfQKTGxuvYcqZYLwg7yEnQuxn",
+    "secretKey": [37, 91, 183, 221, 3, 221, 108, 172, 24, 107, 216, 130, 126, 59, 197, 76, 212, 86, 129, 24, 142, 182, 129, 84, 231, 36, 216, 203, 127, 33, 42, 45, 53, 55, 151, 28, 219, 18, 185, 12, 190, 177, 136, 237, 113, 231, 238, 168, 116, 32, 155, 49, 126, 96, 174, 138, 251, 253, 95, 223, 115, 152, 58, 123],
+    "solLamports": 50000000
+  },
+  "treasury": "3dzCXtNh62pSMFxCYm9ELCXeffjpzX1mn6JJmYsXJDJn",
+  "config": { "minKeeperLamports": 5000000, "computeUnitLimit": 200000, "priorityFeeMicroLamports": "1000" },
+  "userStore": {
+    "2002": {
+      "authority": "E1VXHBYTswzcpFJrUdZLVm3Dssd85GkV81uoNXxh912E",
+      "savingsBps": 1000,
+      "destination": "FH8ibhRdJ4MGVAsgkwdgJUtLHPXZmuZK3JbRXxP5uTvM",
+      "delegate": "4ajmo42ESWmgVt6avsHpfQKTGxuvYcqZYLwg7yEnQuxn",
+      "paused": false,
+      "approvedMints": ["3G333E93jiMPeajVTsEbmCeaPqiyoQ6gGVLFRUQDgWqd"],
+      "updatedAt": "2026-10-04T00:00:00.000Z"
+    }
+  },
+  "chain": {
+    "sourceAmount": "2000000000",
+    "sourceDelegate": "keeper",
+    "sourceDelegatedAmount": "2000000000",
+    "destinationAmount": "0",
+    "treasuryAmount": "0"
+  },
+  "request": {
+    "user": "E1VXHBYTswzcpFJrUdZLVm3Dssd85GkV81uoNXxh912E",
+    "mint": "3G333E93jiMPeajVTsEbmCeaPqiyoQ6gGVLFRUQDgWqd",
+    "outputAmount": "2000000000",
+    "decimals": 6,
+    "signature": "10pctFixtureSwapSig000000000000000000000000000000000"
+  }
+}

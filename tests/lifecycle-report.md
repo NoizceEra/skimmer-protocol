@@ -1,6 +1,6 @@
 # 🧪 Devnet lifecycle report — Skimmer Protocol
 
-Program: `EbRLUsTwqTtMi2M9keQCgkaspNUi1JCBMuVb5v5MjTnJ` (fresh devnet ID)
+Program: `2YHE64pk9NB5NZea7MUGKTdP6zKcjSg4dxdQUuxjdhqp` (fresh devnet ID)
 Binary: `target/deploy/skim_protocol.so`, 328,912 bytes → rent ≈ 2.2895 SOL
 Date: 2026-10-04. RPC: devnet.
 
@@ -22,6 +22,6 @@ Date: 2026-10-04. RPC: devnet.
 ## Watch
 
 - `fund-deploy.log` — when it shows FUNDED + deploy signature, run:
-  `solana program show EbRLUsTwqTtMi2M9keQCgkaspNUi1JCBMuVb5v5MjTnJ --url devnet`
+  `solana program show 2YHE64pk9NB5NZea7MUGKTdP6zKcjSg4dxdQUuxjdhqp --url devnet`
   then `node scripts/lifecycle-devnet.js` (needs user wallet airdrop — same faucet).
 - Private keys stay in `keys/` (gitignored). Nothing secret is committed.

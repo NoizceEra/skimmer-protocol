@@ -5,7 +5,8 @@
   "type": "commonjs",
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "test": "tsc -p tsconfig.test.json && node --test \"dist-test/test/*.test.js\"",
     "start": "node dist/server.js"
   },
   "dependencies": {

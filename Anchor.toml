@@ -6,12 +6,13 @@ resolution = true
 skip-lint = false
 
 # One program: smart-wallet factory + fee enforcer + user-config tag.
-# NOTE: devnet id is a placeholder. Generate fresh under multisig for mainnet.
+# devnet/localnet id = the program that is ACTUALLY LIVE on devnet (322,896 B).
+# mainnet id = not deployed yet; no keypair exists for it.
 [programs.devnet]
-skim_protocol = "EbRLUsTwqTtMi2M9keQCgkaspNUi1JCBMuVb5v5MjTnJ"
+skim_protocol = "2YHE64pk9NB5NZea7MUGKTdP6zKcjSg4dxdQUuxjdhqp"
 
 [programs.localnet]
-skim_protocol = "EbRLUsTwqTtMi2M9keQCgkaspNUi1JCBMuVb5v5MjTnJ"
+skim_protocol = "2YHE64pk9NB5NZea7MUGKTdP6zKcjSg4dxdQUuxjdhqp"
 
 [programs.mainnet]
 skim_protocol = "ECZ6ZsA79WqYEonfJcmSzp51SPg9nSDiTqu4bAxrfvc9"
@@ -21,7 +22,10 @@ url = "https://api.apr.dev"
 
 [provider]
 cluster = "devnet"
-wallet = "~/.config/solana/id.json"
+# Funded devnet key AND the on-chain upgrade authority for the live program.
+# 95DmM5xt695F18s7ouhRHf9wETgyUKxWYWa9z5gma6YG. anchor expands the leading ~
+# (shellexpand::tilde, anchor-cli 0.29 config.rs). Override with --provider.wallet.
+wallet = "~/.config/solana/deployer.json"
 
 [scripts]
 test = "node tests/fee-math.test.js"

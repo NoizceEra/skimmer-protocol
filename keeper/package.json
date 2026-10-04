@@ -6,7 +6,10 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "test": "tsc && node --test \"test/*.test.js\"",
+    "test:only": "node --test \"test/*.test.js\"",
+    "simulate": "tsc && node dist/simulate.js"
   },
   "dependencies": {
     "@solana/spl-token": "^0.4.15",

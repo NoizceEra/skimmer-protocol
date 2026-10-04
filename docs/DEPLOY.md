@@ -1,5 +1,10 @@
 # 🚀 Skimmer Protocol — deploy runbook (off this PC + on-chain + first users)
 
+> **START HERE for v1:** `docs/MINIMAL_DEPLOY.md` — v1 needs **no on-chain program
+> deploy** (plain SPL `Approve` + `TransferChecked`) and targets **$0–5/mo** on a
+> **single process**. Parts 1–2 below are the heavier multi-service + on-chain
+> program path, **deferred** until the atomic session rail is actually wanted.
+
 ## Part 1 — Off this PC (Railway, ~20 min)
 
 Repo: `https://github.com/NoizceEra/skimmer-protocol`. Each service has a
@@ -22,20 +27,41 @@ Dockerfile; Railway builds them directly. No code changes needed.
 4. Turn off the PC bot (delete the `SkimmerTelegramBot` registry Run value) so
    two bots don't double-reply once Railway owns polling.
 
-## Part 2 — On-chain deploy (mainnet, ~1.6 SOL)
+## Part 2 — On-chain program (DEFERRED; not needed for v1)
 
-Do this from WSL2/Ubuntu (Windows SBF builds need the Win SDK — see prior
-`SAS-Vaults-Skim/MAINNET_DEPLOY.md`). Devnet first, same steps, free.
+**v1 does not deploy or call this program.** See `docs/MINIMAL_DEPLOY.md`. Only do
+this if you adopt the on-chain PDA factory / `session_consume` session rail.
 
-1. Install Rust + Solana CLI + Anchor 0.29. `anchor --version` → 0.29.0.
-2. Fresh program keypair + fresh upgrade authority (hardware/Squads for mainnet —
-   never reuse a hot file key). Put the pubkey in `declare_id!` and `Anchor.toml`.
-3. `anchor build` → note `target/deploy/skim_protocol.so` bytes →
-   rent = `(size + 45) × 6960 / 1e9` (see `docs/COSTS.md`).
-4. Fund deployer (~1.6 SOL), `anchor deploy --provider.cluster mainnet`.
-5. Verify: `solana program show <ID>` + send 0.01 SOL test skim on devnet build first.
-6. Update `PROGRAM_ID` everywhere (`.env.example`s, Railway env, bot config) to
-   the real ID.
+Build (this Windows host): `scripts/build-sbf.sh` (wraps `build-sbf-msvc.bat`,
+`cargo-build-sbf 2.2.0`). `anchor build` is broken here — anchor-cli 0.29 calls the
+removed `cargo build-bpf` (`error: no such command: build-bpf`).
+
+Rent is **`(size + 128) × 5080` lamports** (live rent sysvar; NOT the obsolete
+`×6960`), i.e. `solana rent <size>`. For the 328,912-byte build that is
+**1.67152320 SOL** locked; a fresh deploy peaks at **~3.346 SOL** (recommend a 4 SOL
+float). Full model + citations: `docs/DEPLOYMENT_COSTS.md`.
+
+### Upgrade the live devnet program in place (optional, cheap)
+
+```
+scripts/build-sbf.sh
+scripts/deploy-devnet.sh          # prints the exact SOL shortfall if unfunded
+scripts/verify-devnet.sh          # asserts id + authority against devnet
+```
+
+No program keypair is needed for an upgrade (`--program-id <pubkey>` +
+`--upgrade-authority <key>`). The live devnet program is
+`2YHE64pk9NB5NZea7MUGKTdP6zKcjSg4dxdQUuxjdhqp`, authority `95DmM5…`.
+
+### Fresh deploy at a NEW id (mainnet, later)
+
+1. Generate a program keypair and put its pubkey in `declare_id!` + `Anchor.toml`.
+2. Build (`scripts/build-sbf.sh`), fund the deployer with ~4 SOL.
+3. `solana program deploy target/deploy/skim_protocol.so --program-id <keypair.json>
+   --url mainnet-beta` (or `anchor deploy --provider.cluster mainnet`).
+4. Verify: `solana program show <ID> --url mainnet-beta`.
+5. Update `PROGRAM_ID` in every `.env.example` / host env (currently
+   `2YHE64pk…` on devnet — see `docs/PROGRAM_IDS.md`).
 
 ## Part 3 — First users try it (devnet, $0)
 

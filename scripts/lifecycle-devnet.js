@@ -17,7 +17,7 @@ const spl = require(ROOT + '/keeper/node_modules/@solana/spl-token');
 const { Connection, Keypair, PublicKey, Transaction, TransactionInstruction, SystemProgram } = web3;
 
 const RPC = process.env.RPC_URL ?? 'https://api.devnet.solana.com';
-const PROGRAM_ID = new PublicKey(process.env.PROGRAM_ID ?? 'EbRLUsTwqTtMi2M9keQCgkaspNUi1JCBMuVb5v5MjTnJ');
+const PROGRAM_ID = new PublicKey(process.env.PROGRAM_ID ?? '2YHE64pk9NB5NZea7MUGKTdP6zKcjSg4dxdQUuxjdhqp');
 const TREASURY = new PublicKey(process.env.TREASURY ?? '85TK12gDB5HEJog6g9Gs7sw9xomrsMfsAy8ZSgGtS3ka');
 const SAVINGS_BPS = 500; // 5%
 const FEE_BPS = 40; // 0.4%
