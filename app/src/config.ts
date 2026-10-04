@@ -76,6 +76,10 @@ export interface AppConfig {
   sweepsPerSecond: number;
   sweepBurst: number;
 
+  // --- web signing flow ---
+  /** Public base URL for /sign links in Telegram prompts. Null = prompts skipped. */
+  publicUrl: string | null;
+
   // --- bookkeeping for /health ---
   repoRoot: string;
   /** REQUIRED vars absent from the env (empty on a successful load). */
@@ -198,6 +202,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new ConfigError('SWEEP_RATE_PER_SEC > 0 and SWEEP_BURST >= 1 required');
   }
 
+  // Public URL: explicit env > Railway auto-domain > null
+  let publicUrl: string | null = null;
+  if (present(env, 'PUBLIC_URL')) {
+    publicUrl = required(env, 'PUBLIC_URL').trim().replace(/\/$/, '');
+  } else if (present(env, 'RAILWAY_PUBLIC_DOMAIN')) {
+    publicUrl = `https://${required(env, 'RAILWAY_PUBLIC_DOMAIN').trim()}`;
+  }
+
   return {
     webhookPort: port,
     webhookSecret: required(env, 'WEBHOOK_SECRET'),
@@ -223,6 +235,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     backoffMaxMs,
     sweepsPerSecond,
     sweepBurst,
+    publicUrl,
     repoRoot,
     missingEnv,
   };

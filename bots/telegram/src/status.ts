@@ -35,34 +35,29 @@ export function formatStatus(s: UserState): string {
       `1️⃣ 🔗 /connect YOUR_WALLET`,
       `2️⃣ 💰 /set_rate 5`,
       `3️⃣ 🏦 /set_destination SAVINGS_WALLET`,
-      `4️⃣ 🪙 /add_mint MINT`,
-      `5️⃣ 🚀 /spawn_wallet`,
+      `4️⃣ 🚀 /spawn_wallet`,
     ].join('\n');
   }
 
-  const mints = s.approvedMints ?? [];
   const rate = typeof s.savingsBps === 'number' ? `${bpsToPct(s.savingsBps)}% (${s.savingsBps} bps)` : '❌ not set';
   const dest = s.destination ? `\`${s.destination}\`` : '❌ not set';
   const delegate = s.delegate ? `\`${short(s.delegate)}\`` : '❌ not set (KEEPER_DELEGATE missing)';
   const paused = s.paused ? '⏸️ yes' : '▶️ no';
-  const wallet = s.wallet ? `\`${s.wallet}\`` : `\`${walletPda(new PublicKey(s.authority))[0].toBase58()}\``;
 
-  const ready = !!s.destination && !!s.delegate && typeof s.savingsBps === 'number' && mints.length > 0;
+  const ready = !!s.destination && !!s.delegate && typeof s.savingsBps === 'number' && s.savingsBps > 0;
 
   return [
     s.paused ? `⏸️ *Saving paused* 😴` : `📊 *Your skim status* ✅`,
     ``,
     `👤 Wallet: \`${s.authority}\``,
-    `🚀 Skim wallet PDA: \`${wallet}\``,
     `💰 Rate: *${rate}*`,
     `🏦 Savings pot: ${dest}`,
     `🔑 Keeper delegate: ${delegate}`,
     `⏸️ Paused: ${paused}`,
-    `🪙 Mints approved: ${mints.length ? mints.map((m) => `\`${short(m)}\``).join(', ') : '❌ none'}`,
     ``,
     ready
       ? `👉 Run 🚀 /spawn_wallet to (re)issue your one-time approval tx, then trade anywhere! ✨`
-      : `👣 Finish setup: ${!s.destination ? '🏦 /set_destination · ' : ''}${!s.savingsBps ? '💰 /set_rate 5 · ' : ''}${mints.length === 0 ? '🪙 /add_mint · ' : ''}🚀 /spawn_wallet`,
+      : `👣 Finish setup: ${!s.destination ? '🏦 /set_destination · ' : ''}${!s.savingsBps ? '💰 /set_rate 5 · ' : ''}🚀 /spawn_wallet`,
   ].join('\n');
 }
 
@@ -71,31 +66,27 @@ export function formatStatus(s: UserState): string {
  * must not break /status. Returns '' when there is nothing to check.
  */
 export async function verifyDelegations(connection: Connection, s: UserState): Promise<string> {
-  const mints = s.approvedMints ?? [];
-  if (!s.authority || mints.length === 0) return '';
+  if (!s.authority || !s.delegate) return '';
   try {
     const owner = new PublicKey(s.authority);
     const resp = await connection.getParsedTokenAccountsByOwner(owner, {
       programId: TOKEN_PROGRAM_ID,
     });
-    const byMint = new Map<string, any>();
+    const lines: string[] = [];
+    let ok = 0;
     for (const { account } of resp.value) {
       const info = (account.data as any).parsed?.info;
-      if (info?.mint) byMint.set(info.mint, info);
-    }
-    const lines: string[] = [];
-    for (const mint of mints) {
-      const info = byMint.get(mint);
-      if (!info) {
-        lines.push(`• ${short(mint)}: no token account yet — trade it once`);
-      } else if (s.delegate && info.delegate === s.delegate) {
-        lines.push(`✅ ${short(mint)}: approved, allowance ${info.delegatedAmount ?? '0'}`);
+      if (!info?.mint) continue;
+      if (info.delegate === s.delegate) {
+        ok += 1;
+        lines.push(`✅ ${short(info.mint)}: approved, allowance left ${info.delegatedAmount?.amount ?? info.delegatedAmount ?? '0'}`);
       } else {
-        lines.push(`⚠️ ${short(mint)}: not delegated — run 🚀 /spawn_wallet`);
+        lines.push(`⚠️ ${short(info.mint)}: not approved yet`);
       }
     }
-    if (!lines.length) return '';
-    return `🔐 *On-chain delegate check:*\n${lines.join('\n')}`;
+    if (!lines.length) return '🔐 *On-chain check:* no tokens in this wallet yet. Make a first trade — I will message you to approve it.';
+    const head = ok === lines.length ? '🔐 *On-chain check:* all your tokens are approved ✅' : '🔐 *On-chain check:* some tokens need approval — run 🚀 /spawn_wallet';
+    return `${head}\n${lines.slice(0, 15).join('\n')}`;
   } catch {
     return '';
   }

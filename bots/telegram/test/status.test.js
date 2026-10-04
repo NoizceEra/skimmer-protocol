@@ -15,8 +15,8 @@ test('formatStatus shows the real configured state from the store', () => {
   });
   assert.match(text, /5% \(500 bps\)/);
   assert.match(text, /EPjFWdd5/);
-  assert.match(text, /So11…1112|So11111111111111111111111111111111111111112/);
-  assert.match(text, /Mints approved/);
+  assert.match(text, /So11111111111111111111111111111111111111112/);
+  assert.doesNotMatch(text, /Mints approved|PDA/);
   assert.doesNotMatch(text, /❌ not set/);
 });
 
@@ -27,7 +27,8 @@ test('formatStatus reports missing pieces and the onboarding steps', () => {
 
   const partial = formatStatus({ authority: 'So11111111111111111111111111111111111111112' });
   assert.match(partial, /❌ not set/);
-  assert.match(partial, /\/add_mint/);
+  assert.match(partial, /\/set_rate/);
+  assert.doesNotMatch(partial, /add_mint/);
 });
 
 test('formatStatus reflects paused', () => {
@@ -58,14 +59,14 @@ test('verifyDelegations flags approved vs not-delegated mints', async () => {
     delegate,
     approvedMints: [mint],
   });
-  assert.match(ok, /approved, allowance 1080000000/);
+  assert.match(ok, /approved, allowance left 1080000000/);
 
   const bad = await verifyDelegations(fakeConn, {
     authority: 'So11111111111111111111111111111111111111112',
     delegate: 'SomeoneElse1111111111111111111111111111111111',
     approvedMints: [mint],
   });
-  assert.match(bad, /not delegated/);
+  assert.match(bad, /not approved yet/);
 });
 
 test('verifyDelegations never throws on RPC failure', async () => {

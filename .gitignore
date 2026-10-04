@@ -7,3 +7,7 @@ bots/telegram/data/
 target/
 *.log
 .fund-deploy.tmp
+
+# Agent-orchestrator state (replay transcripts, mission state) — never commit:
+# these can contain internal conversation content and must not land in a public repo.
+.omc/

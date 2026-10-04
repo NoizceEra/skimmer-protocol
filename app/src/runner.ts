@@ -26,6 +26,7 @@ import {
   type SweepResult,
 } from './deps';
 import { KeeperBridgeQueue } from './queue-bridge';
+import { mountSignRoutes } from './sign';
 
 export interface Logger {
   info(message: string, meta?: Record<string, unknown>): void;
@@ -39,6 +40,8 @@ export interface BotLike {
   start(): void;
   stop(): Promise<void> | void;
   isRunning(): boolean;
+  /** Optional — send a plain-text Telegram message. Never throws (swallows errors). */
+  sendMessage?(chatId: string, text: string): Promise<void>;
 }
 
 /** The complete set of injected parts. Absent => real wiring is built. */
@@ -124,7 +127,24 @@ function createRealBot(log: Logger): BotLike {
       }
     },
     isRunning: () => running,
+    async sendMessage(chatId: string, text: string): Promise<void> {
+      try {
+        if (bot && bot.api) {
+          await bot.api.sendMessage(chatId, text);
+        }
+      } catch (err) {
+        log.warn('telegram sendMessage failed', { chatId, error: String((err as Error)?.message ?? err) });
+      }
+    },
   };
+}
+
+function resolvePublicUrl(): string | null {
+  const pub = process.env.PUBLIC_URL;
+  if (pub && pub.trim()) return pub.trim().replace(/\/$/, '');
+  const domain = process.env.RAILWAY_PUBLIC_DOMAIN;
+  if (domain && domain.trim()) return `https://${domain.trim()}`;
+  return null;
 }
 
 /** Build the real keeper engine, bot and balance reader from config. */
@@ -215,8 +235,46 @@ export function buildRunner(config: AppConfig, options: RunnerOptions = {}): Run
 
   // The durable keeper queue IS the listener's queue: enqueue -> submit
   // in-process, dedupe + persistence + retry owned by the keeper queue.
+  // Resolve users for new-token prompts (re-reads store on every call — same as keeper).
+  const resolveUserForPrompt = keeper.makeUserResolver(config.userStorePath);
+  const promptThrottle = new Map<string, number>(); // `${authority}:${mint}` → sent-at ms
+
+  // Wrap the injected engine to fire Telegram prompts on 'skipped/no-delegate'.
+  const engineWithPrompt = async (input: SweepInput, dedupeHeld: boolean): Promise<SweepResult> => {
+    const result = await deps.engine(input, dedupeHeld);
+    if (result.status === 'skipped' && (result as { status: 'skipped'; reason: string }).reason === 'no-delegate') {
+      const publicUrl = config.publicUrl;
+      if (publicUrl) {
+        const throttleKey = `${input.authority}:${input.mint}`;
+        const lastSent = promptThrottle.get(throttleKey) ?? 0;
+        if (Date.now() - lastSent >= 24 * 60 * 60 * 1000) {
+          promptThrottle.set(throttleKey, Date.now());
+          try {
+            const user = resolveUserForPrompt(input.authority);
+            if (user && user.chatId) {
+              const link = `${publicUrl}/sign?a=${encodeURIComponent(input.authority)}&m=${encodeURIComponent(input.mint)}`;
+              const text =
+                `A new token appeared in your trade: ${input.mint.slice(0, 8)}…\n\n` +
+                `Approve the keeper for this token so future trades are saved:\n${link}\n\n` +
+                `(Future trades of this token will be saved once approved. ` +
+                `The skim for this first trade is not retroactively swept.)`;
+              await deps.bot.sendMessage?.(user.chatId, text);
+            }
+          } catch (err) {
+            log.warn('new-token prompt failed', { error: String((err as Error)?.message ?? err) });
+          }
+        }
+      } else {
+        log.info('new-token prompt skipped: publicUrl not configured', {
+          user: input.authority, mint: input.mint,
+        });
+      }
+    }
+    return result;
+  };
+
   const keeperQueue = new keeper.SweepQueue({
-    process: deps.engine,
+    process: engineWithPrompt,
     dedupe: deps.dedupe,
     deadletter: deps.deadletter,
     persistPath: config.queuePath,
@@ -281,6 +339,11 @@ export function buildRunner(config: AppConfig, options: RunnerOptions = {}): Run
   // listener, which serves POST /webhook/tx.
   const app = express();
   app.disable('x-powered-by');
+
+  // Sign routes (/sign, /api/approvals, /api/rpc) — mounted before the listener.
+  const signConnection = new Connection(config.rpcUrl, 'confirmed');
+  mountSignRoutes(app, config, signConnection, deps.keeperPubkey);
+
   app.get('/health', async (_req: Request, res: Response) => {
     try {
       res.status(200).json(await buildHealth());

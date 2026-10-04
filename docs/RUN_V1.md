@@ -146,6 +146,27 @@ solana airdrop 1 <KEEPER_PUBKEY> --url devnet
   `scripts/lifecycle-devnet.js` is the FULL-stack test (PDA factory / session rail)
   and needs the program deployed — **not** part of v1.
 
+## 8. Web signing flow (new in this update)
+
+Three new routes are served on the **same port** as `/health` and `/webhook/tx`:
+
+| Route | Description |
+|---|---|
+| `GET /sign?a=<authority>&m=<mint>` | Mobile-friendly dark-theme page; detects Phantom/Solflare/Backpack, verifies connected wallet matches `a`, fetches `/api/approvals`, shows bounded allowance summary, signs + sends via `/api/rpc`. Add `&revoke=1` for revoke mode. |
+| `GET /api/approvals?authority=<base58>[&mints=a,b]` | Builds unsigned approval txs for the user (rate-limited 30/min per IP). Returns `{delegate, cluster, txs:[{base64, items}]}`. Never exposes the RPC URL or API key. |
+| `POST /api/rpc` | Allow-listed RPC proxy. Accepted methods: `sendTransaction`, `getLatestBlockhash`, `getRecentBlockhash`, `getSignatureStatuses`. Forwards to the configured `RPC_URL` server-side so the API key never reaches the browser. |
+
+**New env vars** (all optional):
+
+```
+PUBLIC_URL=https://your-deploy.up.railway.app   # base URL for Telegram sign links
+MAX_ALLOWANCE_UI=100                             # per-mint allowance ceiling in UI units
+```
+
+On Railway, `RAILWAY_PUBLIC_DOMAIN` is auto-set and used as a fallback when `PUBLIC_URL` is absent.
+
+**New-token prompt:** when the keeper engine returns `skipped/no-delegate` for a configured user (swap output token has no approved delegation), the runner sends that user's Telegram chat a plain-text message containing a `/sign?a=...&m=...` link. At most one prompt per (user, mint) per 24 h (in-memory throttle). If neither `PUBLIC_URL` nor `RAILWAY_PUBLIC_DOMAIN` is set, the prompt is silently skipped (sweeping is unaffected).
+
 ## 8. Stop
 
 `Ctrl+C` (or SIGTERM on Linux). The runner stops the bot, closes the port, waits

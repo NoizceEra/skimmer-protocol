@@ -120,7 +120,43 @@ export function loadListener(): ListenerModules {
 export function loadTelegramBot(): {
   start: (opts?: Record<string, unknown>) => Promise<void>;
   stop: () => Promise<void>;
+  api?: { sendMessage(chatId: string | number, text: string, opts?: Record<string, unknown>): Promise<unknown> };
 } {
   const mod = requireFrom<Record<string, unknown>>('bots', 'telegram', 'dist', 'bot.js');
-  return mod.default as { start: (opts?: Record<string, unknown>) => Promise<void>; stop: () => Promise<void> };
+  return mod.default as ReturnType<typeof loadTelegramBot>;
+}
+
+// ── Onboarding module (bots/telegram/dist/onboarding.js) ─────────────────────
+
+export interface WalletApprovalItem {
+  mint: string;
+  tokenAccount: string;
+  decimals: number;
+  allowanceBaseUnits: string;
+}
+
+export interface WalletApprovalTx {
+  base64: string;
+  items: WalletApprovalItem[];
+}
+
+export interface OnboardingModules {
+  buildWalletApprovals: (
+    connection: unknown,
+    p: {
+      user: string;
+      keeperDelegate: string;
+      savingsBps: number;
+      topUps?: number;
+      maxUiAmount?: string;
+      onlyMints?: string[];
+    },
+  ) => Promise<WalletApprovalTx[]>;
+}
+
+export function loadOnboarding(): OnboardingModules {
+  const mod = requireFrom<Record<string, unknown>>('bots', 'telegram', 'dist', 'onboarding.js');
+  return {
+    buildWalletApprovals: mod.buildWalletApprovals as OnboardingModules['buildWalletApprovals'],
+  };
 }

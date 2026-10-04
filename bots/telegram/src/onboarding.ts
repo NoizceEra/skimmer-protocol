@@ -158,3 +158,93 @@ export function formatSetupMessage(
 }
 
 export { baseUnitsToUi };
+
+export interface WalletApprovalItem {
+  mint: string;
+  tokenAccount: string;
+  decimals: number;
+  allowanceBaseUnits: string;
+}
+export interface WalletApprovalTx {
+  /** base64 of one UNSIGNED tx (fee payer = user) containing up to APPROVALS_PER_TX SPL Approves. */
+  base64: string;
+  items: WalletApprovalItem[];
+}
+export const APPROVALS_PER_TX = 6;
+
+/**
+ * "Trade any token" setup: scan EVERY classic-SPL token account the wallet owns and
+ * build bounded, revocable Approves (one per account) for the keeper delegate,
+ * batched into a few unsigned txs. SPL delegation is per token account, so a token
+ * the wallet has never held can only be approved once its account exists — the app
+ * prompts for that the first time such a token shows up (see keeper skip reason).
+ * Pass `onlyMints` to approve just specific mints (used by that prompt).
+ */
+export async function buildWalletApprovals(
+  connection: Connection,
+  p: {
+    user: string;
+    keeperDelegate: string;
+    savingsBps: number;
+    topUps?: number;
+    maxUiAmount?: string;
+    onlyMints?: string[];
+  },
+): Promise<WalletApprovalTx[]> {
+  const sdk = loadSdk();
+  const owner = new PublicKey(p.user);
+  const delegate = new PublicKey(p.keeperDelegate);
+  const programId: PublicKey = sdk.TOKEN_PROGRAM_ID;
+  const accounts = await connection.getParsedTokenAccountsByOwner(owner, { programId });
+  const only = p.onlyMints ? new Set(p.onlyMints) : null;
+
+  const planned: { item: WalletApprovalItem; ix: any }[] = [];
+  const seen = new Set<string>();
+  for (const { pubkey, account } of accounts.value) {
+    const info: any = (account.data as any)?.parsed?.info;
+    if (!info?.mint || typeof info.tokenAmount?.decimals !== 'number') continue;
+    if (info.state === 'frozen') continue;
+    if (only && !only.has(info.mint)) continue;
+    const key = pubkey.toBase58();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const plan = sdk.planSetup({
+      user: owner,
+      keeperDelegate: delegate,
+      mint: new PublicKey(info.mint),
+      userAta: pubkey,
+      decimals: info.tokenAmount.decimals,
+      savingsBps: p.savingsBps,
+      topUps: p.topUps,
+      maxUiAmount: p.maxUiAmount,
+    });
+    planned.push({
+      item: {
+        mint: info.mint,
+        tokenAccount: key,
+        decimals: info.tokenAmount.decimals,
+        allowanceBaseUnits: plan.allowance.toString(),
+      },
+      ix: plan.transaction.instructions[0],
+    });
+  }
+  if (planned.length === 0) return [];
+
+  const { blockhash } = await connection.getLatestBlockhash('confirmed');
+  const { Transaction } = await import('@solana/web3.js');
+  const out: WalletApprovalTx[] = [];
+  for (let i = 0; i < planned.length; i += APPROVALS_PER_TX) {
+    const chunk = planned.slice(i, i + APPROVALS_PER_TX);
+    const tx = new Transaction();
+    for (const c of chunk) tx.add(c.ix);
+    tx.feePayer = owner;
+    tx.recentBlockhash = blockhash;
+    out.push({
+      base64: tx
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('base64'),
+      items: chunk.map((c) => c.item),
+    });
+  }
+  return out;
+}

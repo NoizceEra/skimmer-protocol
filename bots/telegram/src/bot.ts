@@ -3,17 +3,23 @@
  * 🛰️ Skimmer Telegram bot — onboarding + status ONLY.
  * No swaps. No buy/sell. Trading happens on other apps.
  * The bot never holds keys and never signs for the user.
- * Commands: /start /help /connect /set_rate /set_destination /add_mint
- *           /spawn_wallet /status /accrued /pause /resume
+ *
+ * Fool-proof input model:
+ *  - every step arms the NEXT step, so the user can just paste the value (an
+ *    address or a number) as a plain message — no command needed;
+ *  - a bare pasted address / number with nothing armed offers one-tap buttons;
+ *  - replies are HTML and fall back to plain text if Telegram rejects entities,
+ *    so a formatting error can never swallow a reply;
+ *  - any handler error replies to the user instead of failing silently.
  */
-import { Bot, InlineKeyboard } from 'grammy';
+import { Bot, InlineKeyboard, Context } from 'grammy';
 import { Connection, PublicKey } from '@solana/web3.js';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
 import { getState, saveState, parseBps, bpsToPct, addMint, setPaused } from './store';
+import type { UserState } from './store';
 import { formatStatus, verifyDelegations, walletPda } from './status';
-import { buildSetupPlans, formatSetupMessage } from './onboarding';
 
 const token = process.env.TELEGRAM_BOT_TOKEN ?? '';
 if (!token) {
@@ -22,273 +28,385 @@ if (!token) {
 }
 const RPC = process.env.RPC_URL ?? 'https://api.devnet.solana.com';
 const KEEPER_DELEGATE = process.env.KEEPER_DELEGATE ?? '';
-const TREASURY = process.env.TREASURY ?? '';
-const PROGRAM_ID = process.env.PROGRAM_ID ?? '2YHE64pk9NB5NZea7MUGKTdP6zKcjSg4dxdQUuxjdhqp';
-const MAX_ALLOWANCE_UI = process.env.MAX_ALLOWANCE_UI ?? '100';
 const connection = new Connection(RPC, 'confirmed');
 const bot = new Bot(token);
 
-/** 🏠 Main menu — every action one tap away. */
+// ── helpers ──────────────────────────────────────────────────────────────────
+export const esc = (s: string): string =>
+  String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/** Convert the legacy-Markdown subset used by status.ts (*bold*, `code`) to safe HTML. */
+export function mdToHtml(text: string): string {
+  return esc(text)
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+    .replace(/\*([^*\n]+)\*/g, '<b>$1</b>');
+}
+
+const HTML = { parse_mode: 'HTML' as const, link_preview_options: { is_disabled: true } };
+const code = (s: string) => `<code>${esc(s)}</code>`;
+
+/** Extract the first token of free text and validate it as a Solana address. */
+export function parseAddr(raw: string): string {
+  const tok = String(raw ?? '')
+    .replace(/[`<>"'“”‘’(),]/g, ' ')
+    .trim()
+    .split(/\s+/)[0];
+  if (!tok) throw new Error('empty');
+  const pk = new PublicKey(tok);
+  if (pk.equals(PublicKey.default)) throw new Error('zero address');
+  return pk.toBase58();
+}
+
+export function looksLikeAddr(raw: string): boolean {
+  const t = String(raw ?? '').trim();
+  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(t)) return false;
+  try {
+    parseAddr(t);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function publicBase(): string {
+  const p = process.env.PUBLIC_URL?.trim();
+  if (p) return p.replace(/\/+$/, '');
+  const d = process.env.RAILWAY_PUBLIC_DOMAIN?.trim();
+  return d ? `https://${d}` : '';
+}
+export const signUrl = (authority: string, extra = ''): string =>
+  `${publicBase()}/sign?a=${encodeURIComponent(authority)}${extra}`;
+
+// ── Telegram API transformer: never lose a reply to a formatting error ───────
+bot.api.config.use(async (prev, method, payload, signal) => {
+  let res = await prev(method, payload, signal);
+  const p: any = payload;
+  if (!res.ok && res.error_code === 429) {
+    const wait = Math.min(Number((res as any).parameters?.retry_after ?? 1), 5);
+    await new Promise((r) => setTimeout(r, wait * 1000));
+    res = await prev(method, payload, signal);
+  }
+  if (!res.ok && /can't parse entities/i.test(res.description ?? '') && p?.parse_mode) {
+    const { parse_mode: _drop, ...rest } = p;
+    for (const k of ['text', 'caption']) {
+      if (typeof rest[k] === 'string') rest[k] = rest[k].replace(/<[^>]+>/g, '');
+    }
+    return prev(method, rest, signal);
+  }
+  return res;
+});
+
+installGuard(bot); // must be registered before any handler
+
+// ── conversation state: what are we waiting for from this chat? ──────────────
+type Awaiting = 'connect' | 'rate' | 'dest';
+const AWAIT_TTL_MS = 15 * 60 * 1000;
+const awaiting = new Map<number, { kind: Awaiting; at: number }>();
+const arm = (chatId: number, kind: Awaiting) => awaiting.set(chatId, { kind, at: Date.now() });
+const disarm = (chatId: number) => awaiting.delete(chatId);
+function currentAwait(chatId: number): Awaiting | null {
+  const a = awaiting.get(chatId);
+  if (!a) return null;
+  if (Date.now() - a.at > AWAIT_TTL_MS) {
+    awaiting.delete(chatId);
+    return null;
+  }
+  return a.kind;
+}
+
+// ── keyboards ────────────────────────────────────────────────────────────────
 const mainKb = () =>
   new InlineKeyboard()
-    .text('🔗 Connect', 'nav:connect')
+    .text('🔗 Wallet', 'nav:connect')
     .text('💰 Rate', 'nav:rate')
     .row()
     .text('🏦 Savings', 'nav:dest')
-    .text('🪙 Mint', 'nav:mint')
+    .text('🚀 Approve', 'nav:wallet')
     .row()
-    .text('🚀 Wallet', 'nav:wallet')
     .text('📊 Status', 'nav:status')
-    .row()
     .text('💎 Accrued', 'nav:accrued')
+    .row()
+    .text('⏸️ Pause', 'nav:pause')
     .text('❓ Help', 'nav:help');
 
+const rateKb = () =>
+  new InlineKeyboard()
+    .text('2%', 'rate:200')
+    .text('5%', 'rate:500')
+    .text('10%', 'rate:1000');
+
 const WELCOME = [
-  '✂️ *Skimmer Protocol* — pay yourself first! 💸',
+  '✂️ <b>Skimmer Protocol</b> — pay yourself first! 💸',
   '',
-  '🤖 I auto-save a cut of every trade you make — anywhere. You keep trading, I keep skimming. 🏖️',
+  '🤖 I auto-save a cut of every trade you make — on any app, any token. You keep trading, I keep skimming. 🏖️',
   '',
-  '👣 *4 tiny steps:*',
-  '1️⃣ 🔗 /connect — link your wallet',
-  '2️⃣ 💰 /set_rate — pick your cut (e.g. 5)',
-  '3️⃣ 🏦 /set_destination — where savings land',
-  '4️⃣ 🪙 /add_mint — the token you trade',
+  '👣 <b>3 quick steps:</b>',
+  '1️⃣ 🔗 your wallet address',
+  '2️⃣ 💰 your savings % (e.g. 5)',
+  '3️⃣ 🏦 where savings land',
   '',
-  '🚀 Then /spawn_wallet hands you a ONE-TIME bounded approval to sign. ✅ Trade after!',
+  'Then one tap to approve in your wallet ✅ — that’s it.',
   '🔑 I never hold your keys. I never trade. I just save. 🛡️',
 ].join('\n');
 
 const HELP = [
-  '❓ *What I understand:*',
+  '❓ <b>What I understand:</b>',
   '',
-  '🔗 /connect — link your trading wallet',
+  '🔗 /connect — your trading wallet',
   '💰 /set_rate — your savings cut (0–10%)',
   '🏦 /set_destination — your savings wallet',
-  '🪙 /add_mint — register a token you trade',
-  '🚀 /spawn_wallet — get your one-time approval tx',
-  '📊 /status — your real configured state',
+  '🚀 /spawn_wallet — approve in your wallet (one tap)',
+  '📊 /status — your setup + on-chain check',
   '💎 /accrued — savings balance',
-  '⏸️ /pause — pause saving (keeper skips you)',
-  '▶️ /resume — resume saving',
+  '⏸️ /pause · ▶️ /resume — stop / restart saving',
+  '🛑 /revoke — remove my permission completely',
+  '↩️ /cancel — forget what I was waiting for',
   '',
+  '💡 You can also just <b>paste</b> a wallet address or a % and I will ask what it is for.',
   '🚫 No buying or selling here — trade on any app, saving is automatic! ✨',
 ].join('\n');
 
-bot.command('start', async (ctx) => {
-  await ctx.reply(WELCOME, { reply_markup: mainKb(), parse_mode: 'Markdown' });
-});
+// ── the guided "what's next?" engine ─────────────────────────────────────────
+type Reply = { text: string; kb?: InlineKeyboard };
 
-bot.command('help', async (ctx) => {
-  await ctx.reply(HELP, { parse_mode: 'Markdown' });
-});
-
-bot.command('connect', async (ctx) => {
-  const arg = ctx.match.toString().trim();
-  try {
-    const pk = new PublicKey(arg);
-    if (pk.equals(PublicKey.default)) throw new Error('zero address');
-    const s = getState(ctx.chat.id);
-    s.authority = pk.toBase58();
-    if (!s.delegate && KEEPER_DELEGATE) s.delegate = KEEPER_DELEGATE;
-    saveState(ctx.chat.id);
-    await ctx.reply(
-      `🔗 *Connected!* ✅\n\`${pk.toBase58()}\`\n\nNext: 💰 /set_rate 5`,
-      { parse_mode: 'Markdown' },
-    );
-  } catch {
-    await ctx.reply(
-      '🔗 *Connect your wallet:*\n`/connect YOUR_WALLET_ADDRESS`\n\n📌 Paste your Solana address (Phantom, Solflare…).',
-      { parse_mode: 'Markdown' },
-    );
-  }
-});
-
-bot.command('set_rate', async (ctx) => {
-  try {
-    const bps = parseBps(ctx.match.toString());
-    getState(ctx.chat.id).savingsBps = bps;
-    saveState(ctx.chat.id);
-    await ctx.reply(`💰 *Rate set: ${bpsToPct(bps)}%!* 🎯\nEvery trade saves you ${bpsToPct(bps)}%. 🪙\n\nNext: 🏦 /set_destination YOUR_SAVINGS_WALLET`, { parse_mode: 'Markdown' });
-  } catch (e: any) {
-    await ctx.reply('💰 *Pick your cut:*\n`/set_rate 5` = save 5% of every trade 🪙\n\n📏 Min 0%, max 10%. Try 2, 5, or 10!', { parse_mode: 'Markdown' });
-  }
-});
-
-bot.command('set_destination', async (ctx) => {
-  const arg = ctx.match.toString().trim();
-  try {
-    const pk = new PublicKey(arg);
-    getState(ctx.chat.id).destination = pk.toBase58();
-    saveState(ctx.chat.id);
-    const s = getState(ctx.chat.id);
-    await ctx.reply(
-      `🏦 *Savings pot set!* ✅\n\`${pk.toBase58()}\`\n💰 Rate: ${s.savingsBps ?? '?'} bps\n\nNext: 🪙 /add_mint MINT (the token you trade) → 🚀 /spawn_wallet`,
-      { parse_mode: 'Markdown' },
-    );
-  } catch {
-    await ctx.reply('🏦 *Where should savings land?*\n`/set_destination SAVINGS_WALLET`\n\n💡 Tip: use a separate wallet so savings pile up untouched! 🐷', { parse_mode: 'Markdown' });
-  }
-});
-
-bot.command('add_mint', async (ctx) => {
-  const arg = ctx.match.toString().trim();
-  try {
-    const pk = new PublicKey(arg);
-    if (pk.equals(PublicKey.default)) throw new Error('zero address');
-    const added = addMint(ctx.chat.id, pk.toBase58());
-    const s = getState(ctx.chat.id);
-    await ctx.reply(
-      [
-        added ? `🪙 *Mint registered!* ✅` : `🪙 *Mint already registered.*`,
-        `\`${pk.toBase58()}\``,
-        ``,
-        `Total mints: ${s.approvedMints?.length ?? 0}`,
-        ``,
-        `Next: 🚀 /spawn_wallet to get your one-time approval tx.`,
-      ].join('\n'),
-      { parse_mode: 'Markdown' },
-    );
-  } catch {
-    await ctx.reply(
-      '🪙 *Register a token you trade:*\n`/add_mint MINT_ADDRESS`\n\n💡 SOL (wrapped) = So111…1112 · USDC = EPjFWdd5…Dt1v',
-      { parse_mode: 'Markdown' },
-    );
-  }
-});
-
-bot.command('spawn_wallet', async (ctx) => {
-  const s = getState(ctx.chat.id);
+function nextStep(chatId: number, prefix = ''): Reply {
+  const s = getState(chatId);
+  const pre = prefix ? `${prefix}\n\n` : '';
   if (!s.authority) {
-    await ctx.reply('🔗 First link a wallet: /connect YOUR_WALLET');
-    return;
+    arm(chatId, 'connect');
+    return { text: `${pre}1️⃣ 🔗 <b>Paste your wallet address</b> (Phantom, Solflare…) — just send it as a message. 👇` };
   }
   if (s.savingsBps == null) {
-    await ctx.reply('💰 First pick a rate: /set_rate 5');
-    return;
+    arm(chatId, 'rate');
+    return { text: `${pre}2️⃣ 💰 <b>What % of each trade should I save?</b>\nTap one or type a number (0–10). 👇`, kb: rateKb() };
   }
   if (!s.destination) {
-    await ctx.reply('🏦 First set savings: /set_destination YOUR_SAVINGS_WALLET');
+    arm(chatId, 'dest');
+    return {
+      text: `${pre}3️⃣ 🏦 <b>Where should savings land?</b>\nPaste a savings wallet address (tip: a separate wallet keeps it untouched 🐷), or tap below to use your own wallet.`,
+      kb: new InlineKeyboard().text('Use my own wallet', 'dest:same'),
+    };
+  }
+  disarm(chatId);
+  const link = publicBase() ? signUrl(s.authority) : '';
+  return {
+    text: `${pre}✅ <b>Setup saved.</b> One last step: approve me in your wallet (a bounded, revocable permission — never unlimited).\n\n👉 /spawn_wallet`,
+    kb: link ? new InlineKeyboard().url('✍️ Approve in my wallet', link) : mainKb(),
+  };
+}
+
+async function send(ctx: Context, r: Reply) {
+  await ctx.reply(r.text, { ...HTML, ...(r.kb ? { reply_markup: r.kb } : {}) });
+}
+
+// ── actions (shared by commands, plain-text replies, and buttons) ────────────
+async function doConnect(ctx: Context, raw: string): Promise<boolean> {
+  const chatId = ctx.chat!.id;
+  let addr: string;
+  try {
+    addr = parseAddr(raw);
+  } catch {
+    arm(chatId, 'connect');
+    await ctx.reply('🤔 That doesn’t look like a Solana address. Paste it again (32–44 letters/numbers, e.g. from Phantom → Copy address). 👇', HTML);
+    return false;
+  }
+  const s = getState(chatId);
+  const changed = s.authority && s.authority !== addr;
+  s.authority = addr;
+  if (!s.delegate && KEEPER_DELEGATE) s.delegate = KEEPER_DELEGATE;
+  saveState(chatId);
+  await send(ctx, nextStep(chatId, `🔗 <b>Wallet connected!</b> ✅\n${code(addr)}${changed ? '\n(replaced your previous wallet — re-approve with /spawn_wallet)' : ''}`));
+  return true;
+}
+
+async function doRate(ctx: Context, raw: string): Promise<boolean> {
+  const chatId = ctx.chat!.id;
+  let bps: number;
+  try {
+    bps = parseBps(raw);
+  } catch (e: any) {
+    arm(chatId, 'rate');
+    await ctx.reply(`💰 ${esc(e.message)}\nTry 2, 5 or 10 — or tap a button. 👇`, { ...HTML, reply_markup: rateKb() });
+    return false;
+  }
+  const s = getState(chatId);
+  s.savingsBps = bps;
+  saveState(chatId);
+  await send(ctx, nextStep(chatId, `💰 <b>Rate set: ${bpsToPct(bps)}%!</b> 🎯 Every trade saves ${bpsToPct(bps)}%.`));
+  return true;
+}
+
+async function doDest(ctx: Context, raw: string): Promise<boolean> {
+  const chatId = ctx.chat!.id;
+  let addr: string;
+  try {
+    addr = parseAddr(raw);
+  } catch {
+    arm(chatId, 'dest');
+    await ctx.reply('🤔 That doesn’t look like a Solana address. Paste your savings wallet address again. 👇', HTML);
+    return false;
+  }
+  const s = getState(chatId);
+  s.destination = addr;
+  saveState(chatId);
+  await send(ctx, nextStep(chatId, `🏦 <b>Savings pot set!</b> ✅\n${code(addr)}`));
+  return true;
+}
+
+async function doSpawn(ctx: Context) {
+  const chatId = ctx.chat!.id;
+  const s = getState(chatId);
+  if (!s.authority || s.savingsBps == null || !s.destination) {
+    await send(ctx, nextStep(chatId, '👣 Let’s finish setup first.'));
     return;
   }
-  s.wallet = walletPda(new PublicKey(s.authority))[0].toBase58();
-
-  // The keeper delegate whose bounded approval the user grants.
   const delegate = s.delegate || KEEPER_DELEGATE;
   if (!delegate) {
-    saveState(ctx.chat.id);
-    await ctx.reply(
-      '⚙️ Protocol not configured — the operator must set KEEPER_DELEGATE in the bot environment. Nothing to sign yet.',
-    );
+    await ctx.reply('⚙️ Protocol not configured — the operator must set KEEPER_DELEGATE. Nothing to sign yet.');
     return;
   }
   s.delegate = delegate;
-
-  const mints = (s.approvedMints ?? []).slice();
-  if (mints.length === 0) {
-    saveState(ctx.chat.id);
-    await ctx.reply(
-      [
-        `🚀 *Your skim wallet PDA:* \`${s.wallet}\``,
-        ``,
-        `🪙 I still need the token(s) you trade so I can build a BOUNDED approval.`,
-        `Register each mint, then re-run /spawn_wallet:`,
-        `\`/add_mint MINT_ADDRESS\``,
-        ``,
-        `💡 SOL (wrapped) = \`So11111111111111111111111111111111111111112\``,
-        `💡 USDC = \`EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\``,
-      ].join('\n'),
-      { parse_mode: 'Markdown' },
-    );
+  s.wallet = walletPda(new PublicKey(s.authority))[0].toBase58();
+  saveState(chatId);
+  if (!publicBase()) {
+    await ctx.reply('⚙️ The signing page is not configured — the operator must set PUBLIC_URL. Nothing to sign yet.');
     return;
   }
+  const link = signUrl(s.authority);
+  await ctx.reply(
+    [
+      '🚀 <b>One tap to finish.</b>',
+      '',
+      `Open the link with the wallet you connected (${code(s.authority.slice(0, 4) + '…' + s.authority.slice(-4))}) and approve.`,
+      `It grants my keeper a <b>bounded, revocable</b> permission on the tokens you hold — never unlimited, and I never see your keys.`,
+      '',
+      `💰 Saving ${bpsToPct(s.savingsBps)}% → ${code(s.destination.slice(0, 4) + '…' + s.destination.slice(-4))}`,
+      '',
+      '🪙 Trading a brand-new token later? I will message you with a one-tap approval the first time it shows up.',
+    ].join('\n'),
+    { ...HTML, reply_markup: new InlineKeyboard().url('✍️ Approve in my wallet', link) },
+  );
+}
 
-  saveState(ctx.chat.id);
-  await ctx.reply(`🚀 Building your one-time, bounded approval tx for ${mints.length} mint(s)… 🔧`);
-  try {
-    const plans = await buildSetupPlans(connection, {
-      user: s.authority,
-      keeperDelegate: delegate,
-      savingsBps: s.savingsBps,
-      mints,
-      topUps: 20,
-      maxUiAmount: MAX_ALLOWANCE_UI,
-    });
-    for (const plan of plans) {
-      // Plain text (no Markdown) so the base64 blob can never break an entity.
-      await ctx.reply(
-        formatSetupMessage(plan, {
-          user: s.authority,
-          savingsBps: s.savingsBps as number,
-          delegate,
-        }),
-      );
-    }
-    await ctx.reply(
-      `✅ Done. That is everything — approve the tx in YOUR wallet and go trade anywhere! 🔑 I never see your keys.`,
-    );
-  } catch (e: any) {
-    await ctx.reply(`😅 Couldn't build the approval tx: ${e.message}`);
-  }
-});
-
-bot.command('status', async (ctx) => {
-  const s = getState(ctx.chat.id);
+async function doStatus(ctx: Context) {
+  const chatId = ctx.chat!.id;
+  const s = getState(chatId);
   const text = formatStatus(s);
   if (!s.authority) {
-    await ctx.reply(text, { reply_markup: mainKb(), parse_mode: 'Markdown' });
+    await ctx.reply(mdToHtml(text), { ...HTML, reply_markup: mainKb() });
     return;
   }
-  // Read the REAL configured state from the shared store; enrich best-effort with chain.
   const chain = await verifyDelegations(connection, s);
-  await ctx.reply(chain ? `${text}\n\n${chain}` : text, { parse_mode: 'Markdown' });
-});
+  await ctx.reply(mdToHtml(chain ? `${text}\n\n${chain}` : text), { ...HTML, reply_markup: mainKb() });
+}
 
-bot.command('accrued', async (ctx) => {
-  const s = getState(ctx.chat.id);
+async function doAccrued(ctx: Context) {
+  const s = getState(ctx.chat!.id);
   if (!s.destination) {
-    await ctx.reply('🏦 Set savings first: /set_destination YOUR_SAVINGS_WALLET 🐷');
+    await send(ctx, nextStep(ctx.chat!.id, '🏦 Set your savings wallet first.'));
     return;
   }
   try {
     const bal = await connection.getBalance(new PublicKey(s.destination));
     await ctx.reply(
-      `💎 *Your savings pot* 🐷\n\`${s.destination}\`\n\n💰 SOL: *${bal / 1e9}* ✨\n🪙 Tokens: skim lands as the traded token — peek in an explorer! 🔍`,
-      { parse_mode: 'Markdown' },
+      `💎 <b>Your savings pot</b> 🐷\n${code(s.destination)}\n\n💰 SOL: <b>${bal / 1e9}</b> ✨\n🪙 Tokens: skim lands as the token you traded — peek in an explorer! 🔍`,
+      HTML,
     );
   } catch (e: any) {
-    await ctx.reply('💎 Balance check hiccup 😅: ' + e.message);
+    await ctx.reply('💎 Balance check hiccup 😅 — try again in a moment.');
+    console.error('accrued error', e?.message);
+  }
+}
+
+async function doPause(ctx: Context, paused: boolean) {
+  const chatId = ctx.chat!.id;
+  const s = getState(chatId);
+  if (!s.authority) {
+    await send(ctx, nextStep(chatId, '🔗 Link a wallet first.'));
+    return;
+  }
+  setPaused(chatId, paused);
+  await ctx.reply(
+    paused
+      ? '⏸️ <b>Saving paused.</b> The keeper will skip your trades until you /resume.\n\n⚠️ Pausing is not revoking: to remove my permission entirely, run /revoke.'
+      : '▶️ <b>Saving resumed!</b> 🚀 I will save your cut on your next trade. 💰',
+    HTML,
+  );
+}
+
+// ── commands ─────────────────────────────────────────────────────────────────
+bot.command('start', async (ctx) => {
+  disarm(ctx.chat.id);
+  const s = getState(ctx.chat.id);
+  await ctx.reply(WELCOME, HTML);
+  await send(ctx, nextStep(ctx.chat.id, s.authority ? '👋 Welcome back — here’s where you are:' : ''));
+});
+
+bot.command('help', async (ctx) => {
+  await ctx.reply(HELP, { ...HTML, reply_markup: mainKb() });
+});
+
+bot.command('cancel', async (ctx) => {
+  disarm(ctx.chat.id);
+  await ctx.reply('👌 Cancelled. Use the menu or /help anytime.', { reply_markup: mainKb() });
+});
+
+bot.command('connect', async (ctx) => {
+  const arg = ctx.match.toString().trim();
+  if (arg) return void (await doConnect(ctx, arg));
+  arm(ctx.chat.id, 'connect');
+  await ctx.reply('🔗 <b>Paste your wallet address</b> now — just send it as a message. 👇', HTML);
+});
+
+bot.command('set_rate', async (ctx) => {
+  const arg = ctx.match.toString().trim();
+  if (arg) return void (await doRate(ctx, arg));
+  arm(ctx.chat.id, 'rate');
+  await ctx.reply('💰 <b>What % of each trade should I save?</b> Tap one or type a number (0–10). 👇', { ...HTML, reply_markup: rateKb() });
+});
+
+bot.command('set_destination', async (ctx) => {
+  const arg = ctx.match.toString().trim();
+  if (arg) return void (await doDest(ctx, arg));
+  arm(ctx.chat.id, 'dest');
+  await ctx.reply('🏦 <b>Paste your savings wallet address</b> now (tip: a separate wallet keeps it untouched 🐷), or tap below.', {
+    ...HTML,
+    reply_markup: new InlineKeyboard().text('Use my own wallet', 'dest:same'),
+  });
+});
+
+// Optional/advanced — no longer part of onboarding (approval covers every token you hold).
+bot.command('add_mint', async (ctx) => {
+  const arg = ctx.match.toString().trim();
+  try {
+    const mint = parseAddr(arg);
+    const added = addMint(ctx.chat.id, mint);
+    await ctx.reply(`🪙 ${added ? 'Noted' : 'Already noted'}: ${code(mint)}\n\nYou don’t need this anymore — /spawn_wallet approves every token you hold, and I will prompt you for new ones.`, HTML);
+  } catch {
+    await ctx.reply('🪙 Optional: <code>/add_mint MINT_ADDRESS</code>. Not needed — I cover every token you trade.', HTML);
   }
 });
 
-bot.command('pause', async (ctx) => {
+bot.command('spawn_wallet', doSpawn);
+bot.command('status', doStatus);
+bot.command('accrued', doAccrued);
+bot.command('pause', (ctx) => doPause(ctx, true));
+bot.command('resume', (ctx) => doPause(ctx, false));
+
+bot.command('revoke', async (ctx) => {
   const s = getState(ctx.chat.id);
   if (!s.authority) {
-    await ctx.reply('🔗 Link a wallet first: /connect YOUR_WALLET 🙂');
+    await send(ctx, nextStep(ctx.chat.id, '🔗 Nothing to revoke yet — link a wallet first.'));
     return;
   }
   setPaused(ctx.chat.id, true);
-  await ctx.reply(
-    [
-      `⏸️ *Saving paused.*`,
-      ``,
-      `I recorded ⏸️ paused = true in your shared config, which the keeper reads — so it will skip your sweeps.`,
-      ``,
-      `⚠️ Honest note: pausing the keeper is not the same as REVOKING its on-chain permission. To revoke the delegate entirely you must additionally sign an SPL Revoke (or a 0-amount approve) from your wallet — I never hold keys, so I can't sign it for you. Run 🚀 /spawn_wallet for the tx blob, or approve 0 on that token account.`,
-    ].join('\n'),
-    { parse_mode: 'Markdown' },
-  );
-});
-
-bot.command('resume', async (ctx) => {
-  const s = getState(ctx.chat.id);
-  if (!s.authority) {
-    await ctx.reply('🔗 Link a wallet first: /connect YOUR_WALLET 🙂');
+  if (!publicBase()) {
+    await ctx.reply('⏸️ Paused. To fully revoke, sign an SPL Revoke on each token account from your wallet.');
     return;
   }
-  setPaused(ctx.chat.id, false);
   await ctx.reply(
-    `▶️ *Saving resumed!* 🚀\n\n⏸️ paused = false is recorded. The keeper will sweep your cut on your next trade. 💰`,
-    { parse_mode: 'Markdown' },
+    '🛑 <b>Revoke</b> — I paused saving. Tap below, connect the same wallet, and sign to remove my keeper’s permission on all your tokens. You can re-enable any time with /spawn_wallet.',
+    { ...HTML, reply_markup: new InlineKeyboard().url('🛑 Revoke permission', signUrl(s.authority, '&revoke=1')) },
   );
 });
 
@@ -297,37 +415,147 @@ bot.hears(/^\/(buy|sell|swap|trade)\b/i, async (ctx) => {
   await ctx.reply('🚫 No trading here — by design! 😎\n\nTrade on any app 📱, saving happens on its own ✨. Check 📊 /status to peek! 👀');
 });
 
+// ── buttons ──────────────────────────────────────────────────────────────────
 bot.on('callback_query:data', async (ctx) => {
   const d = ctx.callbackQuery.data;
-  await ctx.answerCallbackQuery();
-  switch (d) {
-    case 'nav:connect':
-      await ctx.reply('🔗 Tap then type:\n`/connect YOUR_WALLET_ADDRESS` 📋', { parse_mode: 'Markdown' });
+  try {
+    await ctx.answerCallbackQuery();
+  } catch {
+    /* stale query — keep going */
+  }
+  if (!ctx.chat) return;
+  const chatId = ctx.chat.id;
+  const [kind, a, b] = d.split(':');
+  switch (kind) {
+    case 'nav':
+      switch (a) {
+        case 'connect':
+          arm(chatId, 'connect');
+          return void (await ctx.reply('🔗 <b>Paste your wallet address</b> now. 👇', HTML));
+        case 'rate':
+          arm(chatId, 'rate');
+          return void (await ctx.reply('💰 <b>What % should I save?</b> Tap or type 0–10. 👇', { ...HTML, reply_markup: rateKb() }));
+        case 'dest':
+          arm(chatId, 'dest');
+          return void (await ctx.reply('🏦 <b>Paste your savings wallet address</b>, or tap below.', { ...HTML, reply_markup: new InlineKeyboard().text('Use my own wallet', 'dest:same') }));
+        case 'wallet':
+          return void (await doSpawn(ctx));
+        case 'status':
+          return void (await doStatus(ctx));
+        case 'accrued':
+          return void (await doAccrued(ctx));
+        case 'pause':
+          return void (await doPause(ctx, true));
+        default:
+          return void (await ctx.reply(HELP, HTML));
+      }
+    case 'rate':
+      return void (await doRate(ctx, String(Number(a) / 100)));
+    case 'dest':
+      if (a === 'same') {
+        const s = getState(chatId);
+        if (!s.authority) return void (await send(ctx, nextStep(chatId, '🔗 Link your wallet first.')));
+        return void (await doDest(ctx, s.authority));
+      }
       break;
-    case 'nav:rate':
-      await ctx.reply('💰 Tap then type:\n`/set_rate 5` = save 5% 🪙 (max 10%)', { parse_mode: 'Markdown' });
+    case 'use':
+      // use:c:<addr> (wallet) · use:d:<addr> (savings) · use:r:<pct> (rate)
+      if (a === 'c') return void (await doConnect(ctx, b ?? ''));
+      if (a === 'd') return void (await doDest(ctx, b ?? ''));
+      if (a === 'r') return void (await doRate(ctx, b ?? ''));
       break;
-    case 'nav:dest':
-      await ctx.reply('🏦 Tap then type:\n`/set_destination SAVINGS_WALLET` 🐷', { parse_mode: 'Markdown' });
-      break;
-    case 'nav:mint':
-      await ctx.reply('🪙 Tap then type:\n`/add_mint MINT_ADDRESS`\n\n💡 SOL (wrapped) = `So11111111111111111111111111111111111111112`', { parse_mode: 'Markdown' });
-      break;
-    case 'nav:wallet':
-      await ctx.reply('🚀 Run /spawn_wallet to get your one-time approval tx! 🎉');
-      break;
-    case 'nav:status':
-      await ctx.reply('📊 Run /status for your live setup! ⚡');
-      break;
-    case 'nav:accrued':
-      await ctx.reply('💎 Run /accrued to see savings! 🐷✨');
-      break;
-    default:
-      await ctx.reply(HELP, { parse_mode: 'Markdown' });
+  }
+  await ctx.reply(HELP, HTML);
+});
+
+// ── plain text: the part that used to be silently ignored ───────────────────
+bot.on('message:text', async (ctx) => {
+  const text = ctx.message.text.trim();
+  const chatId = ctx.chat.id;
+  if (text.startsWith('/')) {
+    await ctx.reply('🤷 I don’t know that command. Here’s what I can do:', { ...HTML, reply_markup: mainKb() });
+    await ctx.reply(HELP, HTML);
+    return;
+  }
+  const want = currentAwait(chatId);
+  if (want === 'connect') return void (await doConnect(ctx, text));
+  if (want === 'rate') return void (await doRate(ctx, text));
+  if (want === 'dest') return void (await doDest(ctx, text));
+
+  if (looksLikeAddr(text)) {
+    const addr = parseAddr(text);
+    const s = getState(chatId);
+    const kb = new InlineKeyboard().text(s.authority ? '🔗 My wallet (replace)' : '🔗 My wallet', `use:c:${addr}`);
+    kb.row().text('🏦 My savings wallet', `use:d:${addr}`);
+    await ctx.reply(`📋 Got an address:\n${code(addr)}\n\nWhat is it for?`, { ...HTML, reply_markup: kb });
+    return;
+  }
+  if (/^\d+(\.\d+)?\s*%?$/.test(text)) {
+    try {
+      const bps = parseBps(text);
+      await ctx.reply(`💰 Set your savings rate to <b>${bpsToPct(bps)}%</b>?`, {
+        ...HTML,
+        reply_markup: new InlineKeyboard().text(`Yes, ${bpsToPct(bps)}%`, `use:r:${text.replace('%', '').trim()}`),
+      });
+      return;
+    } catch (e: any) {
+      await ctx.reply(`💰 ${esc(e.message)}`, { ...HTML, reply_markup: rateKb() });
+      return;
+    }
+  }
+  await send(ctx, nextStep(chatId, '🤔 I didn’t catch that.'));
+});
+
+bot.on('message', async (ctx) => {
+  await ctx.reply('📎 I can only read text. Paste your wallet address or use the menu — /help', { ...HTML, reply_markup: mainKb() });
+});
+
+// ── safety nets ──────────────────────────────────────────────────────────────
+let commandsRegistered = false;
+bot.catch(async (err) => {
+  console.error('bot error', err.error);
+  try {
+    await err.ctx.reply('😅 Something went wrong on my side. Please try again — if it keeps happening, send /start.');
+  } catch {
+    /* nothing more we can do */
   }
 });
 
-bot.catch((err) => console.error('bot error', err));
+/** Registers menu commands once and keeps the bot DM-only. Called before handlers run. */
+export function installGuard(b: Bot): void {
+  b.use(async (ctx, next) => {
+    if (!commandsRegistered) {
+      commandsRegistered = true;
+      b.api
+        .setMyCommands([
+          { command: 'start', description: 'Start / where am I?' },
+          { command: 'connect', description: 'Link your wallet' },
+          { command: 'set_rate', description: 'Set savings %' },
+          { command: 'set_destination', description: 'Set savings wallet' },
+          { command: 'spawn_wallet', description: 'Approve in your wallet' },
+          { command: 'status', description: 'My setup + on-chain check' },
+          { command: 'accrued', description: 'Savings balance' },
+          { command: 'pause', description: 'Pause saving' },
+          { command: 'resume', description: 'Resume saving' },
+          { command: 'revoke', description: 'Remove my permission' },
+          { command: 'help', description: 'Help' },
+        ])
+        .catch(() => {});
+    }
+    if (ctx.chat && ctx.chat.type !== 'private') {
+      await ctx.reply('🔒 Please message me in a private chat — wallet setup must not happen in groups.').catch(() => {});
+      return;
+    }
+    try {
+      await next();
+    } catch (err) {
+      console.error('handler error', (err as any)?.message ?? err);
+      await ctx
+        .reply('😅 Something went wrong on my side. Please try again — if it keeps happening, send /start.')
+        .catch(() => {});
+    }
+  });
+}
 
 if (require.main === module) {
   bot.start();
