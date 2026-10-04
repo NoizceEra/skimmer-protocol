@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://skimmer-protocol.vercel.app/sitemap.xml

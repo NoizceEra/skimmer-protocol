@@ -1,0 +1,26 @@
+{
+  "name": "Skimmer Protocol",
+  "short_name": "Skimmer",
+  "description": "Pay Yourself First. Set your savings rate once, trade anywhere, and every trade automatically pays you first. Non-custodial, built on Solana.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#05070D",
+  "theme_color": "#05070D",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -12,7 +12,7 @@ export function configPda(authority: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync([Buffer.from('user_config'), authority.toBuffer()], PROGRAM_ID);
 }
 
-/** Read on-chain status for /status. No trading, read-only. */
+/** 📊 Read on-chain status for /status. No trading, read-only. */
 export async function fetchStatus(
   connection: Connection,
   authority: PublicKey,
@@ -22,19 +22,27 @@ export async function fetchStatus(
   const cfgInfo = await connection.getAccountInfo(cfg);
   if (!cfgInfo) {
     return [
-      `No skim config yet.`,
-      `Wallet: ${authority.toBase58()}`,
-      `Expected smart wallet: ${wallet.toBase58()}`,
-      `Use /set_rate 5 then /set_destination <addr> then /spawn_wallet.`,
+      `📊 *Your skim status* 🔍`,
+      ``,
+      `😴 No savings running yet!`,
+      `👤 Wallet: \`${authority.toBase58()}\``,
+      `🚀 Skim wallet will be: \`${wallet.toBase58()}\``,
+      ``,
+      `👣 Start here: 💰 /set_rate 5 → 🏦 /set_destination → 🚀 /spawn_wallet ✨`,
     ].join('\n');
   }
   const bps = cfgInfo.data.readUInt16LE(8 + 32 + 32 + 32);
   const paused = cfgInfo.data.readUInt8(8 + 32 + 32 + 32 + 2) === 1;
   const dest = new PublicKey(cfgInfo.data.subarray(8 + 32 + 32, 8 + 32 + 32 + 32)).toBase58();
   return [
-    `Skim: ${bps / 100}% (${bps} bps) ${paused ? '[PAUSED]' : ''}`,
-    `Destination: ${dest}`,
-    `Smart wallet: ${wallet.toBase58()}`,
-    `Trade anywhere — every trade auto-skims like a fee. Check destination balances for accrued total.`,
+    paused ? `⏸️ *Saving paused* 😴` : `📊 *Saving live!* ✅⚡`,
+    ``,
+    `💰 Rate: *${bps / 100}%* (${bps} bps) 🎯`,
+    `🏦 Savings pot: \`${dest}\``,
+    `🚀 Skim wallet: \`${wallet.toBase58()}\``,
+    ``,
+    paused
+      ? `▶️ /resume to start stacking again! 🪙`
+      : `✨ Trade anywhere — every win drops 🪙 in your pot! Check 💎 /accrued 👀`,
   ].join('\n');
 }

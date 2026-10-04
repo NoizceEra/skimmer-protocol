@@ -1,8 +1,9 @@
 'use strict';
 /**
- * Skim Telegram bot — onboarding + status ONLY.
- * No swaps. No buy/sell. Trading happens on other wallets/platforms.
- * This bot: /connect, /set_rate, /set_destination, /spawn_wallet, /status, /accrued, /pause, /resume, /help, /start.
+ * 🛰️ Skimmer Telegram bot — onboarding + status ONLY.
+ * No swaps. No buy/sell. Trading happens on other apps.
+ * Commands: /start /help /connect /set_rate /set_destination /spawn_wallet
+ *           /status /accrued /pause /resume
  */
 import { Bot, InlineKeyboard } from 'grammy';
 import { Connection, PublicKey } from '@solana/web3.js';
@@ -21,32 +22,55 @@ const RPC = process.env.RPC_URL ?? 'https://api.devnet.solana.com';
 const connection = new Connection(RPC, 'confirmed');
 const bot = new Bot(token);
 
+/** 🏠 Main menu — every action one tap away. */
 const mainKb = () =>
-  new InlineKeyboard().text('Set rate', 'nav:rate').text('Status', 'nav:status').row().text('Help', 'nav:help');
+  new InlineKeyboard()
+    .text('🔗 Connect', 'nav:connect')
+    .text('💰 Rate', 'nav:rate')
+    .row()
+    .text('🏦 Savings', 'nav:dest')
+    .text('🚀 Wallet', 'nav:wallet')
+    .row()
+    .text('📊 Status', 'nav:status')
+    .text('💎 Accrued', 'nav:accrued')
+    .row()
+    .text('❓ Help', 'nav:help');
+
+const WELCOME = [
+  '✂️ *Skimmer Protocol* — pay yourself first! 💸',
+  '',
+  '🤖 I auto-save a cut of every trade you make — anywhere. You keep trading, I keep skimming. 🏖️',
+  '',
+  '👣 *3 tiny steps:*',
+  '1️⃣ 🔗 /connect — link your wallet',
+  '2️⃣ 💰 /set_rate — pick your cut (e.g. 5)',
+  '3️⃣ 🏦 /set_destination — where savings land',
+  '',
+  '✅ Then just trade! Every win drops savings in your pot. 🪙',
+  '🔑 I never hold your keys. I never trade. I just save. 🛡️',
+].join('\n');
+
+const HELP = [
+  '❓ *What I understand:*',
+  '',
+  '🔗 /connect — link your trading wallet',
+  '💰 /set_rate — your savings cut (0–10%)',
+  '🏦 /set_destination — your savings wallet',
+  '🚀 /spawn_wallet — show your skim wallet',
+  '📊 /status — your setup + rate',
+  '💎 /accrued — savings balance',
+  '⏸️ /pause — pause saving',
+  '▶️ /resume — resume saving',
+  '',
+  '🚫 No buying or selling here — trade on any app, saving is automatic! ✨',
+].join('\n');
 
 bot.command('start', async (ctx) => {
-  await ctx.reply(
-    [
-      'Skim Protocol — auto-save as a fee.',
-      '',
-      '1. /connect <your wallet>',
-      '2. /set_rate 5  (0–10%)',
-      '3. /set_destination <savings wallet>',
-      '4. /spawn_wallet (shows your smart-wallet PDA)',
-      '',
-      'Then trade anywhere. Every trade skims like slippage to your savings.',
-      'Use /status to see config, /accrued to see savings balance.',
-      '',
-      'This bot never trades and never holds keys.',
-    ].join('\n'),
-    { reply_markup: mainKb() },
-  );
+  await ctx.reply(WELCOME, { reply_markup: mainKb(), parse_mode: 'Markdown' });
 });
 
 bot.command('help', async (ctx) => {
-  await ctx.reply(
-    '/connect <wallet> — link authority\n/set_rate <pct> — e.g. /set_rate 5\n/set_destination <wallet>\n/spawn_wallet — show PDA to fund\n/status — config + wallet\n/accrued — destination balance\n/pause, /resume\n\nNo trading here by design.',
-  );
+  await ctx.reply(HELP, { parse_mode: 'Markdown' });
 });
 
 bot.command('connect', async (ctx) => {
@@ -56,9 +80,9 @@ bot.command('connect', async (ctx) => {
     if (pk.equals(PublicKey.default)) throw new Error('zero address');
     getState(ctx.chat.id).authority = pk.toBase58();
     saveState(ctx.chat.id);
-    await ctx.reply(`Connected: ${pk.toBase58()}\nNow /set_rate 5`);
+    await ctx.reply(`🔗 *Connected!* ✅\n\`${pk.toBase58()}\`\n\nNext: 💰 /set_rate 5`, { parse_mode: 'Markdown' });
   } catch {
-    await ctx.reply('Usage: /connect <your Solana wallet address>');
+    await ctx.reply('🔗 *Connect your wallet:*\n`/connect YOUR_WALLET_ADDRESS`\n\n📌 Paste your Solana address (Phantom, Solflare…).', { parse_mode: 'Markdown' });
   }
 });
 
@@ -67,9 +91,9 @@ bot.command('set_rate', async (ctx) => {
     const bps = parseBps(ctx.match.toString());
     getState(ctx.chat.id).savingsBps = bps;
     saveState(ctx.chat.id);
-    await ctx.reply(`Savings rate: ${bpsToPct(bps)}% (${bps} bps)\nNow /set_destination <savings wallet>`);
+    await ctx.reply(`💰 *Rate set: ${bpsToPct(bps)}%!* 🎯\nEvery trade saves you ${bpsToPct(bps)}%. 🪙\n\nNext: 🏦 /set_destination YOUR_SAVINGS_WALLET`, { parse_mode: 'Markdown' });
   } catch (e: any) {
-    await ctx.reply(e.message ?? 'Usage: /set_rate 5');
+    await ctx.reply('💰 *Pick your cut:*\n`/set_rate 5` = save 5% of every trade 🪙\n\n📏 Min 0%, max 10%. Try 2, 5, or 10!', { parse_mode: 'Markdown' });
   }
 });
 
@@ -81,25 +105,26 @@ bot.command('set_destination', async (ctx) => {
     saveState(ctx.chat.id);
     const s = getState(ctx.chat.id);
     await ctx.reply(
-      `Destination: ${pk.toBase58()}\nRate: ${s.savingsBps ?? '?'} bps\nUse /spawn_wallet to finish.`,
+      `🏦 *Savings pot set!* ✅\n\`${pk.toBase58()}\`\n💰 Rate: ${s.savingsBps ?? '?'} bps\n\n🚀 Finish with /spawn_wallet`,
+      { parse_mode: 'Markdown' },
     );
   } catch {
-    await ctx.reply('Usage: /set_destination <savings wallet address>');
+    await ctx.reply('🏦 *Where should savings land?*\n`/set_destination SAVINGS_WALLET`\n\n💡 Tip: use a separate wallet so savings pile up untouched! 🐷', { parse_mode: 'Markdown' });
   }
 });
 
 bot.command('spawn_wallet', async (ctx) => {
   const s = getState(ctx.chat.id);
   if (!s.authority) {
-    await ctx.reply('First /connect <wallet>');
+    await ctx.reply('🔗 First link a wallet: /connect YOUR_WALLET');
     return;
   }
   if (s.savingsBps == null) {
-    await ctx.reply('First /set_rate 5');
+    await ctx.reply('💰 First pick a rate: /set_rate 5');
     return;
   }
   if (!s.destination) {
-    await ctx.reply('First /set_destination <addr>');
+    await ctx.reply('🏦 First set savings: /set_destination YOUR_SAVINGS_WALLET');
     return;
   }
   const [pda] = walletPda(new PublicKey(s.authority));
@@ -107,68 +132,88 @@ bot.command('spawn_wallet', async (ctx) => {
   saveState(ctx.chat.id);
   await ctx.reply(
     [
-      `Your skim wallet (PDA): ${pda.toBase58()}`,
-      `Owner: ${s.authority}`,
-      `Saves ${bpsToPct(s.savingsBps)}% of every trade output to ${s.destination}`,
-      `Fund/trade from this wallet. Fee enforced on-chain as output*bps/10000.`,
-      `Sign initialize_smart_wallet in your wallet app — this bot never holds keys.`,
+      `🚀 *Your skim wallet is ready!* 🎉`,
+      `\`${pda.toBase58()}\``,
+      ``,
+      `👤 Owner: \`${s.authority}\``,
+      `💰 Saves ${bpsToPct(s.savingsBps)}% of every trade → 🏦 savings 🪙`,
+      `⛽ Tiny 0.4% keeps the protocol running.`,
+      ``,
+      `✅ You're set! Go trade anywhere — saving is automatic! ✨`,
+      `🔑 Sign the setup in your wallet app — I never touch keys. 🛡️`,
     ].join('\n'),
+    { parse_mode: 'Markdown' },
   );
 });
 
 bot.command('status', async (ctx) => {
   const s = getState(ctx.chat.id);
   if (!s.authority) {
-    await ctx.reply('Use /connect <wallet> first. Local view: ' + JSON.stringify(s));
+    await ctx.reply('🔗 Link a wallet first: /connect YOUR_WALLET 🙂', { reply_markup: mainKb() });
     return;
   }
   try {
     const text = await fetchStatus(connection, new PublicKey(s.authority));
-    await ctx.reply(text);
+    await ctx.reply(text, { parse_mode: 'Markdown' });
   } catch (e: any) {
-    await ctx.reply('Status failed: ' + e.message);
+    await ctx.reply('📊 Status hiccup 😅: ' + e.message + '\nTry again in a sec! 🔄');
   }
 });
 
 bot.command('accrued', async (ctx) => {
   const s = getState(ctx.chat.id);
   if (!s.destination) {
-    await ctx.reply('Set /set_destination first, then I can check its SOL balance.');
+    await ctx.reply('🏦 Set savings first: /set_destination YOUR_SAVINGS_WALLET 🐷');
     return;
   }
   try {
     const bal = await connection.getBalance(new PublicKey(s.destination));
-    await ctx.reply(`Savings ${s.destination}\nSOL: ${bal / 1e9}\n(Token mints: check explorer — skim lands as output mint.)`);
+    await ctx.reply(
+      `💎 *Your savings pot* 🐷\n\`${s.destination}\`\n\n💰 SOL: *${bal / 1e9}* ✨\n🪙 Tokens: skim lands as the traded token — peek in an explorer! 🔍`,
+      { parse_mode: 'Markdown' },
+    );
   } catch (e: any) {
-    await ctx.reply('Balance check failed: ' + e.message);
+    await ctx.reply('💎 Balance check hiccup 😅: ' + e.message);
   }
 });
 
 bot.command('pause', async (ctx) => {
-  await ctx.reply('To pause: sign set_paused(true) on your user_config PDA in your wallet. Bot does not hold keys, so it cannot pause for you.');
+  await ctx.reply('⏸️ *Pause saving:* sign “pause” on your savings setup in your wallet app. 🔑\n\n💡 I can’t pause for you — I never hold keys! Your funds stay safe either way. 🛡️', { parse_mode: 'Markdown' });
 });
 
 bot.command('resume', async (ctx) => {
-  await ctx.reply('To resume: sign set_paused(false) on your user_config PDA in your wallet.');
+  await ctx.reply('▶️ *Resume saving:* sign “resume” on your savings setup in your wallet app. 🚀\n\n💰 Back to stacking every trade! 🪙', { parse_mode: 'Markdown' });
 });
 
-// Explicit: no trading surface.
+// 🚫 Explicit: no trading surface.
 bot.hears(/^\/(buy|sell|swap|trade)\b/i, async (ctx) => {
-  await ctx.reply('Trading is disabled here by design. Trade on any platform — skim applies automatically. Use /status to verify.');
+  await ctx.reply('🚫 No trading here — by design! 😎\n\nTrade on any app 📱, saving happens on its own ✨. Check 📊 /status to peek! 👀');
 });
 
 bot.on('callback_query:data', async (ctx) => {
   const d = ctx.callbackQuery.data;
-  if (d === 'nav:status') {
-    const s = getState(ctx.chat!.id);
-    await ctx.answerCallbackQuery();
-    await ctx.reply(s.authority ? 'Use /status for on-chain view.' : 'Use /connect first.');
-  } else if (d === 'nav:rate') {
-    await ctx.answerCallbackQuery();
-    await ctx.reply('Use /set_rate 5 (means 5%). Max 10%.');
-  } else {
-    await ctx.answerCallbackQuery();
-    await ctx.reply('Use /help.');
+  await ctx.answerCallbackQuery();
+  switch (d) {
+    case 'nav:connect':
+      await ctx.reply('🔗 Tap then type:\n`/connect YOUR_WALLET_ADDRESS` 📋', { parse_mode: 'Markdown' });
+      break;
+    case 'nav:rate':
+      await ctx.reply('💰 Tap then type:\n`/set_rate 5` = save 5% 🪙 (max 10%)', { parse_mode: 'Markdown' });
+      break;
+    case 'nav:dest':
+      await ctx.reply('🏦 Tap then type:\n`/set_destination SAVINGS_WALLET` 🐷', { parse_mode: 'Markdown' });
+      break;
+    case 'nav:wallet':
+      await ctx.reply('🚀 Run /spawn_wallet to see your skim wallet! 🎉');
+      break;
+    case 'nav:status':
+      await ctx.reply('📊 Run /status for your live setup! ⚡');
+      break;
+    case 'nav:accrued':
+      await ctx.reply('💎 Run /accrued to see savings! 🐷✨');
+      break;
+    default:
+      await ctx.reply(HELP, { parse_mode: 'Markdown' });
   }
 });
 
