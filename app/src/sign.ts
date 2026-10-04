@@ -19,6 +19,13 @@ export class RateLimiter {
   private map = new Map<string, RateLimitEntry>();
   constructor(private maxReqs = 30, private windowMs = 60_000) {}
   check(ip: string): boolean {
+    return this.checkWithRetry(ip).allowed;
+  }
+  /**
+   * Like check(), but also reports how many seconds the caller should wait
+   * (for a `Retry-After` header) when the per-IP budget is spent.
+   */
+  checkWithRetry(ip: string): { allowed: boolean; retryAfterSec: number } {
     const now = Date.now();
     let entry = this.map.get(ip);
     if (!entry || now >= entry.resetAt) {
@@ -26,8 +33,22 @@ export class RateLimiter {
       this.map.set(ip, entry);
     }
     entry.count += 1;
-    return entry.count <= this.maxReqs;
+    const allowed = entry.count <= this.maxReqs;
+    const retryAfterSec = allowed ? 0 : Math.max(1, Math.ceil((entry.resetAt - now) / 1000));
+    return { allowed, retryAfterSec };
   }
+}
+
+/** The client IP to rate-limit on: first hop of X-Forwarded-For, else the socket. */
+function clientIp(req: Request): string {
+  return (
+    (typeof req.headers['x-forwarded-for'] === 'string'
+      ? req.headers['x-forwarded-for'].split(',')[0]
+      : undefined
+    )?.trim() ??
+    req.socket?.remoteAddress ??
+    'unknown'
+  );
 }
 
 // ── Dependency interfaces ─────────────────────────────────────────────────────
@@ -560,16 +581,10 @@ export function mountSignRoutes(
 
   // ── GET /api/approvals ──────────────────────────────────────────────────────
   app.get('/api/approvals', async (req: Request, res: Response) => {
-    const ip =
-      (typeof req.headers['x-forwarded-for'] === 'string'
-        ? req.headers['x-forwarded-for'].split(',')[0]
-        : undefined
-      )?.trim() ??
-      req.socket?.remoteAddress ??
-      'unknown';
-
     const deps = getDeps();
-    if (!deps.rateLimiter.check(ip)) {
+    const limit = deps.rateLimiter.checkWithRetry(clientIp(req));
+    if (!limit.allowed) {
+      res.setHeader('Retry-After', String(limit.retryAfterSec));
       res.status(429).json({ error: 'rate limit exceeded' });
       return;
     }
@@ -617,6 +632,17 @@ export function mountSignRoutes(
 
   // ── POST /api/rpc ───────────────────────────────────────────────────────────
   app.post('/api/rpc', jsonParser, async (req: Request, res: Response) => {
+    // Same per-IP limiter the /api/approvals route uses. The method allowlist
+    // stops this being an open relay, but an unthrottled loop would still burn
+    // the operator's paid RPC credits — so bound it per client.
+    const deps = getDeps();
+    const limit = deps.rateLimiter.checkWithRetry(clientIp(req));
+    if (!limit.allowed) {
+      res.setHeader('Retry-After', String(limit.retryAfterSec));
+      res.status(429).json({ error: 'rate limit exceeded' });
+      return;
+    }
+
     const body = req.body as Record<string, unknown>;
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
       res.status(400).json({ error: 'invalid request body' });
@@ -628,7 +654,7 @@ export function mountSignRoutes(
       return;
     }
     try {
-      const result = await getDeps().rpcForward(body);
+      const result = await deps.rpcForward(body);
       res.status(200).json(result);
     } catch {
       res.status(502).json({ error: 'rpc forward failed' });

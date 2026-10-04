@@ -122,8 +122,18 @@ export function loadTelegramBot(): {
   stop: () => Promise<void>;
   api?: { sendMessage(chatId: string | number, text: string, opts?: Record<string, unknown>): Promise<unknown> };
 } {
-  const mod = requireFrom<Record<string, unknown>>('bots', 'telegram', 'dist', 'bot.js');
-  return mod.default as ReturnType<typeof loadTelegramBot>;
+  return loadTelegramBotModule().default;
+}
+
+/** The whole bots/telegram module: the default Bot plus its injection hooks. */
+export function loadTelegramBotModule(): {
+  default: ReturnType<typeof loadTelegramBot>;
+  /** Inject (or clear) the host-process Helius registrar the bot calls on /connect. */
+  setHeliusRegistrar?: (fn: ((authority: string) => Promise<unknown>) | null) => void;
+} {
+  return requireFrom<Record<string, unknown>>('bots', 'telegram', 'dist', 'bot.js') as ReturnType<
+    typeof loadTelegramBotModule
+  >;
 }
 
 // ── Onboarding module (bots/telegram/dist/onboarding.js) ─────────────────────

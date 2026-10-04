@@ -19,6 +19,7 @@ export const DEFAULT_MIN_KEEPER_LAMPORTS = 5_000_000;
 export const DEFAULT_COMPUTE_UNIT_LIMIT = 200_000;
 export const DEFAULT_PRIORITY_FEE_MICRO_LAMPORTS = 1_000n;
 export const DEFAULT_DEDUPE_TTL_MS = 24 * 60 * 60 * 1000;
+export const DEFAULT_HELIUS_API_BASE = 'https://api.helius.xyz';
 
 /**
  * Vars that MUST be present or the process refuses to boot. Chosen so a valid
@@ -79,6 +80,14 @@ export interface AppConfig {
   // --- web signing flow ---
   /** Public base URL for /sign links in Telegram prompts. Null = prompts skipped. */
   publicUrl: string | null;
+
+  // --- Helius webhook watched-address registration (optional) ---
+  /** Helius API key. Null = registration skipped (see helius.ts). */
+  heliusApiKey: string | null;
+  /** Helius webhook id to add each onboarded wallet's authority to. Null = skipped. */
+  heliusWebhookId: string | null;
+  /** Helius management API base (no trailing slash). */
+  heliusApiBase: string;
 
   // --- bookkeeping for /health ---
   repoRoot: string;
@@ -210,6 +219,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     publicUrl = `https://${required(env, 'RAILWAY_PUBLIC_DOMAIN').trim()}`;
   }
 
+  // Helius watched-address registration: BOTH vars required to enable it.
+  // Absent/blank => null => registration is skipped cleanly at runtime.
+  const heliusApiKey = present(env, 'HELIUS_API_KEY') ? required(env, 'HELIUS_API_KEY') : null;
+  const heliusWebhookId = present(env, 'HELIUS_WEBHOOK_ID') ? required(env, 'HELIUS_WEBHOOK_ID') : null;
+  const heliusApiBase = present(env, 'HELIUS_API_BASE')
+    ? required(env, 'HELIUS_API_BASE').replace(/\/+$/, '')
+    : DEFAULT_HELIUS_API_BASE;
+
   return {
     webhookPort: port,
     webhookSecret: required(env, 'WEBHOOK_SECRET'),
@@ -236,6 +253,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     sweepsPerSecond,
     sweepBurst,
     publicUrl,
+    heliusApiKey,
+    heliusWebhookId,
+    heliusApiBase,
     repoRoot,
     missingEnv,
   };

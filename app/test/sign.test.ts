@@ -265,6 +265,32 @@ test('POST /api/rpc — sendTransaction allowed', async () => {
   } finally { await fx.close(); }
 });
 
+test('POST /api/rpc — rate limit fires with Retry-After after the per-IP budget', async () => {
+  const cfg = loadConfig(fakeEnv());
+  const rateLimiter = new RateLimiter(3, 60_000); // 3/min for test speed
+  const rpcForward = async () => ({ jsonrpc: '2.0', id: 1, result: 'sig123' });
+  const fx = await startFixture(cfg, { rateLimiter, rpcForward });
+  const post = () =>
+    fetch(`${fx.base}/api/rpc`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'sendTransaction', params: ['base64data'] }),
+    });
+  try {
+    // The first 3 requests are within budget (200, not 429).
+    for (let i = 0; i < 3; i++) {
+      assert.notEqual((await post()).status, 429, `request ${i + 1} should not be rate-limited`);
+    }
+    // The 4th is throttled with an explicit Retry-After.
+    const r4 = await post();
+    assert.equal(r4.status, 429);
+    const retryAfter = Number(r4.headers.get('retry-after'));
+    assert.ok(Number.isFinite(retryAfter) && retryAfter >= 1, 'Retry-After must be a positive number of seconds');
+    const body = await r4.json() as Record<string, unknown>;
+    assert.ok(typeof body.error === 'string');
+  } finally { await fx.close(); }
+});
+
 test('POST /api/rpc — RPC URL never appears in 403 error body', async () => {
   const cfg = loadConfig(fakeEnv({ RPC_URL: 'https://my-rpc.com/?api-key=TOPSECRET' }));
   const fx = await startFixture(cfg);

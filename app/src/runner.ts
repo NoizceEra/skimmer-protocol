@@ -19,12 +19,14 @@ import {
   loadKeeper,
   loadListener,
   loadTelegramBot,
+  loadTelegramBotModule,
   type DeadLetterLike,
   type DedupeLike,
   type KeeperModules,
   type SweepInput,
   type SweepResult,
 } from './deps';
+import { createHeliusRegistrar } from './helius';
 import { KeeperBridgeQueue } from './queue-bridge';
 import { mountSignRoutes } from './sign';
 
@@ -70,6 +72,8 @@ export interface HealthPayload {
     envReady: boolean;
     missingEnv: string[];
   };
+  /** Helius watched-address registration availability (no secret exposed). */
+  helius: { configured: boolean };
 }
 
 export interface Runner {
@@ -100,14 +104,18 @@ function redactRpc(url: string): string {
   }
 }
 
-function createRealBot(log: Logger): BotLike {
+function createRealBot(log: Logger, registerHeliusAddress?: (authority: string) => Promise<unknown>): BotLike {
   let running = false;
   let bot: ReturnType<typeof loadTelegramBot> | null = null;
   return {
     name: 'telegram',
     start(): void {
       if (running) return;
-      bot = loadTelegramBot();
+      const mod = loadTelegramBotModule();
+      bot = mod.default;
+      // Hand the bot the host-process registrar so /connect adds the wallet to
+      // the Helius webhook's watched list (no-op when Helius isn't configured).
+      mod.setHeliusRegistrar?.(registerHeliusAddress ?? null);
       running = true;
       bot
         .start({ onStart: (info: { username?: string }) => log.info(`telegram bot online as @${info?.username ?? 'unknown'}`) })
@@ -216,7 +224,31 @@ export function buildDefaultDeps(config: AppConfig, log: Logger): RunnerDeps {
     rpc: redactRpc(config.rpcUrl),
   });
 
-  return { engine, bot: createRealBot(log), keeperPubkey, keeperBalance, dedupe, deadletter };
+  // Helius watched-address registration: adds each /connect-ed wallet's authority
+  // to the webhook's accountAddresses. Disabled (skipped, logged once) when the
+  // HELIUS_API_KEY / HELIUS_WEBHOOK_ID pair is not configured — never blocks boot.
+  const helius = createHeliusRegistrar({
+    apiKey: config.heliusApiKey,
+    webhookId: config.heliusWebhookId,
+    apiBase: config.heliusApiBase,
+    logger: log,
+  });
+  if (helius.enabled) {
+    log.info('helius watched-address registration enabled', { webhookId: config.heliusWebhookId });
+  } else {
+    log.info(
+      'helius watched-address registration disabled — set HELIUS_API_KEY and HELIUS_WEBHOOK_ID to auto-watch /connect-ed wallets',
+    );
+  }
+
+  return {
+    engine,
+    bot: createRealBot(log, helius.registerAddress),
+    keeperPubkey,
+    keeperBalance,
+    dedupe,
+    deadletter,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -330,6 +362,9 @@ export function buildRunner(config: AppConfig, options: RunnerOptions = {}): Run
         rpc,
         envReady: config.missingEnv.length === 0,
         missingEnv: config.missingEnv,
+      },
+      helius: {
+        configured: Boolean(config.heliusApiKey && config.heliusWebhookId),
       },
     };
   };

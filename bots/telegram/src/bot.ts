@@ -45,6 +45,28 @@ export function mdToHtml(text: string): string {
 const HTML = { parse_mode: 'HTML' as const, link_preview_options: { is_disabled: true } };
 const code = (s: string) => `<code>${esc(s)}</code>`;
 
+// ── Helius watched-address registration (injected by the host process) ───────
+/**
+ * The single-process runner (app/src/runner.ts) injects a registrar here so that
+ * every wallet completing /connect is added to the Helius webhook's watched
+ * address list — otherwise Helius, whose transaction webhooks are ADDRESS-SCOPED,
+ * never fires POST /webhook/tx for that user's trades. When the bot runs
+ * standalone (or under test) no registrar is injected and this is a no-op.
+ * Best-effort by contract: it never throws and never blocks the reply.
+ */
+export type HeliusRegisterFn = (authority: string) => Promise<unknown>;
+let heliusRegister: HeliusRegisterFn | null = null;
+export function setHeliusRegistrar(fn: HeliusRegisterFn | null): void {
+  heliusRegister = fn;
+}
+function registerWithHelius(authority: string): void {
+  if (!heliusRegister) return;
+  const reg = heliusRegister;
+  Promise.resolve()
+    .then(() => reg(authority))
+    .catch((err) => console.error('helius register failed', (err as Error)?.message ?? err));
+}
+
 /** Extract the first token of free text and validate it as a Solana address. */
 export function parseAddr(raw: string): string {
   const tok = String(raw ?? '')
@@ -215,6 +237,9 @@ async function doConnect(ctx: Context, raw: string): Promise<boolean> {
   s.authority = addr;
   if (!s.delegate && KEEPER_DELEGATE) s.delegate = KEEPER_DELEGATE;
   saveState(chatId);
+  // Ensure Helius watches this wallet so its trades reach the listener/keeper.
+  // Fire-and-forget: the registrar handles its own errors and never blocks.
+  registerWithHelius(addr);
   await send(ctx, nextStep(chatId, `🔗 <b>Wallet connected!</b> ✅\n${code(addr)}${changed ? '\n(replaced your previous wallet — re-approve with /spawn_wallet)' : ''}`));
   return true;
 }

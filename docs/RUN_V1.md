@@ -167,7 +167,59 @@ On Railway, `RAILWAY_PUBLIC_DOMAIN` is auto-set and used as a fallback when `PUB
 
 **New-token prompt:** when the keeper engine returns `skipped/no-delegate` for a configured user (swap output token has no approved delegation), the runner sends that user's Telegram chat a plain-text message containing a `/sign?a=...&m=...` link. At most one prompt per (user, mint) per 24 h (in-memory throttle). If neither `PUBLIC_URL` nor `RAILWAY_PUBLIC_DOMAIN` is set, the prompt is silently skipped (sweeping is unaffected).
 
-## 8. Stop
+## 9. Helius watched-address registration (new in this update)
+
+Helius transaction webhooks are **ADDRESS-SCOPED**: a webhook only fires for the
+accounts listed in its `accountAddresses` array. Without registering the wallet, a
+`/connect`-ed user's trades never reach `POST /webhook/tx`, so `/health` stays
+`queueDepth: 0` forever and the keeper never hears about them.
+
+When `HELIUS_API_KEY` **and** `HELIUS_WEBHOOK_ID` are both set, the app adds each
+wallet's authority to the webhook's watched list the moment the user `/connect`s
+(in `bots/telegram/src/bot.ts`), and `sync:helius` backfills users who onboarded
+before this existed. Registration is **idempotent** and **read-merge-write**: it
+reads the current set, adds only what is missing, and writes the union back — so
+adding one user can never unwatch another. Any Helius/network failure is logged
+and swallowed: onboarding is never blocked or delayed. If either var is unset,
+registration is skipped with a clear log line.
+
+**One-time webhook creation.** The app does **not** auto-create the webhook (the
+id being absent is treated as "skip"): choosing the URL/auth header silently could
+clobber an existing webhook. Create it once via the Dashboard or the API, then set
+`HELIUS_WEBHOOK_ID` to the returned `webhookID`:
+
+```bash
+curl -s -X POST 'https://api.helius.xyz/v0/webhooks?api-key=$HELIUS_API_KEY' \
+  -H 'content-type: application/json' \
+  -d '{
+    "webhookURL": "https://skim-v1-production.up.railway.app/webhook/tx",
+    "webhookType": "enhanced",
+    "transactionTypes": [],
+    "authHeader": "Bearer <WEBHOOK_SECRET>",
+    "accountAddresses": []
+  }'
+```
+
+The update it performs at runtime is `GET` then
+`PUT https://api.helius.xyz/v0/webhooks/{webhookId}?api-key=<key>` carrying the
+existing config fields plus the merged `accountAddresses` (verified against the
+Helius Webhooks API reference — https://www.helius.dev/docs/api-reference/webhooks).
+`HELIUS_API_BASE=https://api-mainnet.helius-rpc.com` gives identical paths/shape.
+
+**Backfill existing users** (idempotent; prints before/after counts):
+
+```bash
+npm --prefix app run build
+npm --prefix app run sync:helius
+# or point at another store:
+# USER_STORE_PATH=/path/to/users.json npm --prefix app run sync:helius
+```
+
+**New env vars** (all optional): `HELIUS_API_KEY`, `HELIUS_WEBHOOK_ID`,
+`HELIUS_API_BASE` (default `https://api.helius.xyz`; override for tests/mocks).
+`GET /health` now also reports `helius.configured` (true/false) — no secret.
+
+## 10. Stop
 
 `Ctrl+C` (or SIGTERM on Linux). The runner stops the bot, closes the port, waits
 (bounded) for in-flight sweeps to drain, and closes the queue. Jobs are persisted
