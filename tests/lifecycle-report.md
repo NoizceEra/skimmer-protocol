@@ -13,7 +13,7 @@
 | Fee math (5% skim + 0.4% fee) | ✅ PASS | `node tests/fee-math.test.js` |
 | Listener webhook (SWAP → queued, noise ignored) | ✅ PASS | `POST /webhook/tx` → `{"queued":1}` / `{"queued":0}` |
 | Bot parsers + per-chat isolation | ✅ PASS | 500/250 bps, 25% rejected, states isolated |
-| On-chain swap test (approve → mint → sweep → verify) | ⏳ PENDING FUNDS | Script exits 2 `UNDERFUNDED` until `keys/lifecycle-user.json` (`5LXiYtjopNFjQNgFJ9KS36jbGhcH8cWFUiUVH1UU5QFy`) holds ≥0.05 devnet SOL. Faucet throttled; run `node scripts/lifecycle-devnet.js` once funded. |
+| On-chain swap test (approve → mint → sweep → verify) | ✅ PASS 2026-10-04 | `scripts/lifecycle-devnet.js` → `LIFECYCLE PASS`. Sweep `2YtmRTRhGurWCF27HEqsKk8ZeB5gMK8wzAQ6xBvWKuLeXMA6hX5VbfQsiNoWXvjEPSjof97Kc3jFVWu7unDoyfBB` ([explorer](https://explorer.solana.com/tx/2YtmRTRhGurWCF27HEqsKk8ZeB5gMK8wzAQ6xBvWKuLeXMA6hX5VbfQsiNoWXvjEPSjof97Kc3jFVWu7unDoyfBB?cluster=devnet)): test mint `HgVEZS5P615jWoAFbzyuRZLH9bf4XTXYng7ok6rxneHr`, 1000 tokens in → savings `50.0` (5%), treasury `4.0` (0.4%). |
 
 Run: `node scripts/lifecycle-devnet.js` (expects 5% → savings, 0.4% → treasury `85TK12...S3ka`).
 
