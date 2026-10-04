@@ -149,7 +149,10 @@ const mainKb = () =>
     .text('💎 Accrued', 'nav:accrued')
     .row()
     .text('⏸️ Pause', 'nav:pause')
-    .text('❓ Help', 'nav:help');
+    .text('❓ Help', 'nav:help')
+    .row()
+    .url('🌐 Website', 'https://skimprotocol.fun')
+    .url('🐦 X', 'https://x.com/SkimProtocolFun');
 
 const rateKb = () =>
   new InlineKeyboard()
