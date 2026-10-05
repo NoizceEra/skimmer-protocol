@@ -10,6 +10,7 @@
  * whole composition can be exercised with no network and no live Telegram token.
  */
 import * as http from 'http';
+import * as nodePath from 'path';
 import express, { type Request, type Response } from 'express';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
@@ -389,6 +390,8 @@ export function buildRunner(config: AppConfig, options: RunnerOptions = {}): Run
   app.get('/', (_req: Request, res: Response) => {
     res.status(200).json({ ok: true, service: 'skim-v1-single-process', health: '/health' });
   });
+  // Public marketing media (fetched by Buffer/X). Read-only, immutable-ish, no directory listing.
+  app.use('/media', express.static(nodePath.resolve(__dirname, '..', '..', 'media'), { index: false, maxAge: '1h', fallthrough: false }));
   app.use(listenerApp);
 
   let server: http.Server | null = null;

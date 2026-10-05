@@ -6,6 +6,7 @@ COPY sdk ./sdk
 COPY keeper ./keeper
 COPY listener ./listener
 COPY bots/telegram ./bots/telegram
+COPY media ./media
 COPY app ./app
 RUN for p in sdk keeper listener bots/telegram app; do \
       npm --prefix $p ci --no-audit --no-fund && npm --prefix $p run build || exit 1; done

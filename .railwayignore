@@ -1,0 +1,13 @@
+assets/
+videos/
+web/
+docs/
+target/
+keys/
+data/
+*.mp4
+!media/*.mp4
+scripts/
+tests/
+*.py
+*.log
